@@ -877,11 +877,19 @@ PREVIEW: data stays in this browser only. The real system saves to Google Sheets
   <span id="modalActions"></span>
   <button class="btn ghost" onclick="closeModal()">Close</button>
 </div><div id="printArea"></div></div></div>
+<div id="scanModal" class="modal hide"><div class="box" style="max-width:520px">
+  <div class="row" style="justify-content:space-between;align-items:center"><b style="font-size:16px">Scan barcode or QR code</b><button class="btn ghost sm" onclick="closeScanner()">Close</button></div>
+  <div id="reader" style="margin-top:10px;border-radius:8px;overflow:hidden;background:#000"></div>
+  <p id="scanMsg" class="small muted"></p>
+  <label class="btn" style="display:inline-block;color:#fff;font-size:14px">Take a photo of the code<input type="file" accept="image/*" capture="environment" class="hide" onchange="scanPhoto(this)"></label>
+  <div class="row" style="margin-top:12px;flex-wrap:nowrap"><input id="scanManual" placeholder="Or type the number" onkeydown="if(event.key==='Enter')scanDone(this.value)"><button class="btn sm" onclick="scanDone($('scanManual').value)">Use</button></div>
+</div></div>
 <div id="loading">Loading Master EV...</div>
 <div id="toast" class="hide"></div>
 
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
-const TABS = [['dash','Dashboard'],['bill','New Bill'],['vehicles','Vehicles'],['acc','Accessories'],['models','Models'],['invoices','Invoices'],['reports','Reports'],['settings','Settings']];
+const TABS = [['dash','Dashboard'],['scan','Scanner'],['bill','New Bill'],['vehicles','Vehicles'],['acc','Accessories'],['models','Models'],['invoices','Invoices'],['reports','Reports'],['settings','Settings']];
 const STATES = [['01','Jammu and Kashmir'],['02','Himachal Pradesh'],['03','Punjab'],['04','Chandigarh'],['05','Uttarakhand'],['06','Haryana'],['07','Delhi'],['08','Rajasthan'],['09','Uttar Pradesh'],['10','Bihar'],['11','Sikkim'],['12','Arunachal Pradesh'],['13','Nagaland'],['14','Manipur'],['15','Mizoram'],['16','Tripura'],['17','Meghalaya'],['18','Assam'],['19','West Bengal'],['20','Jharkhand'],['21','Odisha'],['22','Chhattisgarh'],['23','Madhya Pradesh'],['24','Gujarat'],['26','Dadra and Nagar Haveli and Daman and Diu'],['27','Maharashtra'],['29','Karnataka'],['30','Goa'],['31','Lakshadweep'],['32','Kerala'],['33','Tamil Nadu'],['34','Puducherry'],['35','Andaman and Nicobar Islands'],['36','Telangana'],['37','Andhra Pradesh'],['38','Ladakh'],['97','Other Territory']];
 const PAY_MODES = ['Cash','UPI','Card','Bank Transfer','Cheque','Finance / Loan'];
 let S = {settings:{},models:[],stock:[],accessories:[],dashboard:{}};
@@ -936,7 +944,7 @@ function calc(items,billType,inclusive,interState){
 /* ---------- shell ---------- */
 function renderNav(){$('nav').innerHTML=TABS.map(([k,l])=>`<button class="${k===tab?'on':''}" onclick="go('${k}')">${l}</button>`).join('');}
 function go(k){tab=k;renderNav();render();window.scrollTo(0,0);}
-function render(){({dash:renderDash,bill:renderBill,vehicles:renderVehicles,acc:renderAcc,models:renderModels,invoices:renderInvoices,reports:renderReports,settings:renderSettings})[tab]();}
+function render(){({dash:renderDash,scan:renderScan,bill:renderBill,vehicles:renderVehicles,acc:renderAcc,models:renderModels,invoices:renderInvoices,reports:renderReports,settings:renderSettings})[tab]();}
 function reload(){return call('getBootstrap').then(d=>{S=d;busy(false);render();}).catch(fail);}
 function closeModal(){$('modal').classList.add('hide');$('printArea').innerHTML='';}
 
@@ -985,6 +993,7 @@ function renderBill(){
     <div class="row" style="margin-bottom:12px">
       <div style="flex:1 1 260px"><label>Add a vehicle from stock</label><select id="addVeh"><option value="">${avail.length?'Pick by model / chassis':'No vehicles in stock'}</option>${avail.map(v=>`<option value="${esc(v.StockId)}">${esc(v.ModelName)} ${v.Color?'('+esc(v.Color)+')':''} | Ch ${esc(v.ChassisNo)}</option>`).join('')}</select></div>
       <button class="btn" onclick="addVehicleLine()">Add vehicle</button>
+      <button class="btn ghost" onclick="openScanner(scanToBill)">Scan vehicle</button>
       <div style="flex:1 1 200px"><label>Add an accessory</label><select id="addAcc"><option value="">${acc.length?'Pick item':'No accessories in stock'}</option>${acc.map(a=>`<option value="${esc(a.ItemId)}">${esc(a.Name)} (${num(a.Qty)} left)</option>`).join('')}</select></div>
       <button class="btn" onclick="addAccLine()">Add item</button>
       <button class="btn ghost" onclick="addOtherLine()">+ Other line</button>
@@ -1012,10 +1021,22 @@ function lookupCustomer(){
 }
 function addVehicleLine(){
   const id=$('addVeh').value;if(!id)return toast('Pick a vehicle first',true);
-  const v=S.stock.find(x=>x.StockId===id);const m=S.models.find(x=>x.ModelId===v.ModelId)||{};
-  bill.items.push({itemType:'VEHICLE',refId:id,description:v.ModelName+(v.Color?' - '+v.Color:''),chassisNo:v.ChassisNo,motorNo:v.MotorNo,batteryNo:v.BatteryNo,chargerNo:v.ChargerNo,
-    hsn:m.HSN||S.settings.DefaultVehicleHSN||'8711',qty:1,unitPrice:num(m.SalePrice),gstRate:m.GSTRate!==''&&m.GSTRate!=null?num(m.GSTRate):num(S.settings.DefaultVehicleGSTRate||5)});
+  bill.items.push(vehicleItem(id));
   renderBill();
+}
+function scanToBill(code){
+  const used=bill.items.filter(i=>i.itemType==='VEHICLE').map(i=>i.refId);
+  const hits=findStock(code);
+  const ok=hits.filter(v=>v.Status==='In Stock'&&used.indexOf(v.StockId)<0);
+  if(ok.length===1){bill.items.push(vehicleItem(ok[0].StockId));renderBill();return toast('Added '+ok[0].ModelName);}
+  if(!hits.length)return toast('No vehicle found for '+code,true);
+  if(ok.length>1)return toast('More than one vehicle matches '+code+'. Pick it from the list.',true);
+  toast(used.indexOf(hits[0].StockId)>=0?'That vehicle is already on this bill':'That vehicle is already sold ('+hits[0].SoldInvoiceNo+')',true);
+}
+function vehicleItem(id){
+  const v=S.stock.find(x=>x.StockId===id);const m=S.models.find(x=>x.ModelId===v.ModelId)||{};
+  return {itemType:'VEHICLE',refId:id,description:v.ModelName+(v.Color?' - '+v.Color:''),chassisNo:v.ChassisNo,motorNo:v.MotorNo,batteryNo:v.BatteryNo,chargerNo:v.ChargerNo,
+    hsn:m.HSN||S.settings.DefaultVehicleHSN||'8711',qty:1,unitPrice:num(m.SalePrice),gstRate:m.GSTRate!==''&&m.GSTRate!=null?num(m.GSTRate):num(S.settings.DefaultVehicleGSTRate||5)};
 }
 function addAccLine(){
   const id=$('addAcc').value;if(!id)return toast('Pick an item first',true);
@@ -1107,6 +1128,7 @@ function cancelInv(no){
 
 /* ---------- vehicles ---------- */
 let vehFilter={status:'In Stock',q:''};
+let vehPrefill={};
 function renderVehicles(){
   const models=S.models.filter(m=>String(m.Active).toUpperCase()!=='NO');
   $('main').innerHTML=`<h2>Vehicles</h2>
@@ -1115,22 +1137,22 @@ function renderVehicles(){
   <div class="form" id="vform">
     <div class="wide"><label>Model *</label><select name="ModelId"><option value="">Select model</option>${models.map(m=>`<option value="${esc(m.ModelId)}">${esc(modelName(m))} | ${money0(m.SalePrice)}</option>`).join('')}</select></div>
     <div><label>Colour</label><input name="Color"></div>
-    <div><label>Chassis / VIN no. *</label><input name="ChassisNo" style="text-transform:uppercase"></div>
-    <div><label>Motor no.</label><input name="MotorNo" style="text-transform:uppercase"></div>
-    <div><label>Battery no.</label><input name="BatteryNo" style="text-transform:uppercase"></div>
-    <div><label>Charger no.</label><input name="ChargerNo" style="text-transform:uppercase"></div>
+    ${[['ChassisNo','Chassis / VIN no. *'],['MotorNo','Motor no.'],['BatteryNo','Battery no.'],['ChargerNo','Charger no.']].map(([k,l])=>
+      `<div><label>${l}</label><div class="row" style="flex-wrap:nowrap"><input name="${k}" value="${esc(vehPrefill[k]||'')}" style="text-transform:uppercase;flex:1 1 auto;min-width:0"><button class="btn ghost sm" type="button" onclick="scanInto(this)">Scan</button></div></div>`).join('')}
     <div><label>Supplier</label><input name="Supplier"></div>
     <div><label>Purchase invoice no.</label><input name="PurchaseInvoiceNo"></div>
     <div><label>Purchase date</label><input type="date" name="PurchaseDate" value="${today()}"></div>
     <div><label>Cost price (blank = model cost)</label><input type="number" step="0.01" name="CostPrice"></div>
     <div class="wide"><label>Notes</label><input name="Notes"></div>
-  </div><div class="row" style="margin-top:12px"><button class="btn lime" onclick="saveVehicle()">Add to stock</button></div></div>
+  </div><p class="small muted">Tip: tap Scan next to a number to read its barcode or QR code instead of typing it.</p><div class="row" style="margin-top:12px"><button class="btn lime" onclick="saveVehicle()">Add to stock</button></div></div>
   <div class="card"><div class="row" style="margin-bottom:10px">
     <div><label>Status</label><select onchange="vehFilter.status=this.value;vehTable()">${['In Stock','Sold','All'].map(s=>`<option${s===vehFilter.status?' selected':''}>${s}</option>`).join('')}</select></div>
     <div style="flex:1 1 240px"><label>Search model, colour, chassis, motor, battery</label><input value="${esc(vehFilter.q)}" oninput="vehFilter.q=this.value;vehTable()"></div>
   </div><div class="scroll" id="vtable"></div></div>`;
+  vehPrefill={};
   vehTable();
 }
+function scanInto(btn){const inp=btn.previousElementSibling;openScanner(t=>{inp.value=t.trim().toUpperCase();toast('Scanned '+inp.value);});}
 function vehTable(){
   const q=vehFilter.q.toLowerCase();
   const rows=S.stock.filter(v=>(vehFilter.status==='All'||v.Status===vehFilter.status)&&(!q||[v.ModelName,v.Color,v.ChassisNo,v.MotorNo,v.BatteryNo,v.ChargerNo,v.Supplier].join(' ').toLowerCase().indexOf(q)>=0)).reverse();
@@ -1246,6 +1268,115 @@ function saveSettings(){
   if(o.GSTIN&&o.StateCode&&o.GSTIN.slice(0,2)!==o.StateCode)return toast('GSTIN starts with '+o.GSTIN.slice(0,2)+' but the state code is '+o.StateCode,true);
   busy(true,'Saving settings...');call('saveSettings',o).then(()=>{toast('Settings saved');return reload();}).catch(fail);
 }
+
+/* ---------- scanner ---------- */
+let scanCb=null,qr=null;
+function openScanner(cb){
+  scanCb=cb;$('scanManual').value='';$('scanModal').classList.remove('hide');
+  if(!window.Html5Qrcode){$('scanMsg').textContent='The camera scanner could not load. Take a photo of the code or type the number.';return;}
+  $('scanMsg').textContent='Starting camera...';
+  qr=new Html5Qrcode('reader',{experimentalFeatures:{useBarCodeDetectorIfSupported:true},verbose:false});
+  qr.start({facingMode:'environment'},{fps:10,qrbox:(w,h)=>({width:Math.floor(Math.min(w*0.9,380)),height:Math.floor(Math.min(h*0.6,220))})},t=>scanDone(t),()=>{})
+    .then(()=>{$('scanMsg').textContent='Point the camera at the barcode or QR code and hold still.';})
+    .catch(()=>{qr=null;$('scanMsg').textContent='The live camera is not available here. Use "Take a photo of the code" instead, or type the number.';});
+}
+function stopCam(){const q=qr;qr=null;return q?q.stop().then(()=>q.clear()).catch(()=>{}):Promise.resolve();}
+function closeScanner(){scanCb=null;stopCam();$('scanModal').classList.add('hide');$('scanMsg').textContent='';}
+function scanDone(text){
+  text=String(text||'').trim();if(!text||!scanCb)return;
+  const cb=scanCb;closeScanner();
+  try{navigator.vibrate&&navigator.vibrate(80);}catch(e){}
+  cb(text);
+}
+function scanPhoto(inp){
+  const f=inp.files&&inp.files[0];inp.value='';if(!f)return;
+  if(!window.Html5Qrcode)return toast('The scanner could not load. Type the number instead.',true);
+  $('scanMsg').textContent='Reading the photo...';
+  stopCam().then(()=>{const q=new Html5Qrcode('reader',{experimentalFeatures:{useBarCodeDetectorIfSupported:true},verbose:false});
+    return q.scanFile(f,false).then(t=>{q.clear();scanDone(t);});})
+    .catch(()=>{$('scanMsg').textContent='No code found in that photo. Try again closer, in good light, with the code flat and sharp.';});
+}
+function norm(s){return String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');}
+const CODE_FIELDS=[['ChassisNo','Chassis'],['MotorNo','Motor'],['BatteryNo','Battery'],['ChargerNo','Charger']];
+/** Vehicles whose chassis, motor, battery or charger number matches a scanned code. */
+function findStock(code){
+  const c=norm(code);if(!c)return [];
+  let hits=S.stock.filter(v=>CODE_FIELDS.some(([k])=>norm(v[k])===c));
+  if(!hits.length&&c.length>=6)hits=S.stock.filter(v=>CODE_FIELDS.some(([k])=>{const x=norm(v[k]);return x.length>=6&&(c.indexOf(x)>=0||x.indexOf(c)>=0);}));
+  return hits;
+}
+function matchedField(v,code){const c=norm(code);const f=CODE_FIELDS.find(([k])=>norm(v[k])===c)||CODE_FIELDS.find(([k])=>{const x=norm(v[k]);return x&&(c.indexOf(x)>=0||x.indexOf(c)>=0);});return f?f[1]:'';}
+
+let scanMode='find',scanFound=null;
+const AUDIT_KEY='masterev-stockcheck';
+let audit=(()=>{try{return JSON.parse(localStorage.getItem(AUDIT_KEY))||null;}catch(e){return null;}})()||{started:'',scans:[]};
+function saveAudit(){try{localStorage.setItem(AUDIT_KEY,JSON.stringify(audit));}catch(e){}}
+
+function renderScan(){
+  const find=scanMode==='find';
+  $('main').innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:14px"><h2 style="margin:0">Scanner</h2>
+    <div class="seg"><button class="${find?'on':''}" onclick="scanMode='find';renderScan()">FIND VEHICLE</button><button class="${!find?'on':''}" onclick="scanMode='audit';renderScan()">STOCK CHECK</button></div></div>
+  <div class="card"><p class="small muted" style="margin-top:0">${find?'Scan the chassis, motor, battery or charger number to see that scooter.':'Walk the showroom and scan every scooter. The list below shows what is missing and what is not in the system.'}</p>
+    <div class="row" style="flex-wrap:nowrap"><input id="scanIn" placeholder="Scan with a barcode gun, or type a number and press Enter" style="flex:1 1 auto;min-width:0" onkeydown="if(event.key==='Enter'){handleScan(this.value);}">
+    <button class="btn lime" onclick="openScanner(handleScan)">Scan with camera</button></div></div>
+  <div id="scanOut"></div>`;
+  find?renderFind():renderAudit();
+  const i=$('scanIn');if(i&&window.matchMedia('(pointer:fine)').matches)i.focus();
+}
+function handleScan(code){
+  code=String(code||'').trim();if($('scanIn'))$('scanIn').value='';if(!code)return;
+  if(scanMode==='find'){scanFound={code,hits:findStock(code)};renderFind();}else auditScan(code);
+  const i=$('scanIn');if(i&&window.matchMedia('(pointer:fine)').matches)i.focus();
+}
+function renderFind(){
+  const out=$('scanOut');if(!out)return;
+  if(!scanFound){out.innerHTML='';return;}
+  const {code,hits}=scanFound;
+  if(!hits.length){out.innerHTML=`<div class="card" style="border-color:var(--amber)"><b>No vehicle found for ${esc(code)}</b><p class="small muted">It is not in stock and was never sold from this system.</p>
+    <button class="btn lime" onclick="vehPrefill={ChassisNo:'${esc(code.toUpperCase().replace(/[^A-Z0-9\-\/]/g,''))}'};go('vehicles')">Add a new vehicle with this chassis no.</button></div>`;return;}
+  out.innerHTML=hits.map(v=>{const sold=v.Status!=='In Stock';return `<div class="card" style="border:2px solid ${sold?'#999':'var(--green)'}">
+    <div class="row" style="justify-content:space-between;align-items:center"><div style="font-size:18px;font-weight:800">${esc(v.ModelName)}</div>${sold?'<span class="pill p-sold">Sold</span>':'<span class="pill p-in">In stock</span>'}</div>
+    <div class="small muted">Matched on ${esc(matchedField(v,code))} number ${esc(code)}</div>
+    <table class="tbl" style="margin-top:8px"><tr><td>Colour</td><td>${esc(v.Color)||'-'}</td></tr><tr><td>Chassis</td><td><b>${esc(v.ChassisNo)}</b></td></tr><tr><td>Motor</td><td>${esc(v.MotorNo)||'-'}</td></tr><tr><td>Battery</td><td>${esc(v.BatteryNo)||'-'}</td></tr><tr><td>Charger</td><td>${esc(v.ChargerNo)||'-'}</td></tr>
+    <tr><td>Purchased</td><td>${fmtDate(v.PurchaseDate)} ${v.Supplier?'from '+esc(v.Supplier):''}</td></tr>${sold?`<tr><td>Sold</td><td>${fmtDate(v.SoldDate)}, bill <a href="#" onclick="openInvoice('${esc(v.SoldInvoiceNo)}');return false">${esc(v.SoldInvoiceNo)}</a></td></tr>`:''}</table>
+    ${sold?'':`<div class="row" style="margin-top:10px"><button class="btn lime" onclick="billFromScan('${esc(v.StockId)}','GST')">Make GST bill</button><button class="btn" onclick="billFromScan('${esc(v.StockId)}','NORMAL')">Make normal bill</button></div>`}</div>`;}).join('');
+}
+function billFromScan(id,type){bill=blankBill(type);bill.items.push(vehicleItem(id));go('bill');}
+
+function auditScan(code){
+  const c=norm(code);
+  if(audit.scans.some(s=>norm(s.code)===c))return toast(code+' is already counted',true);
+  const hits=findStock(code);
+  const v=hits.find(h=>h.Status==='In Stock')||hits[0];
+  if(v&&audit.scans.some(s=>s.stockId===v.StockId))return toast('This scooter is already counted ('+v.ChassisNo+')',true);
+  if(!audit.started)audit.started=new Date().toLocaleString('en-IN');
+  audit.scans.push({code,stockId:v?v.StockId:'',time:new Date().toLocaleTimeString('en-IN')});
+  saveAudit();
+  toast(v?'Counted: '+v.ModelName:'Not in system: '+code,!v);
+  renderAudit();
+}
+function renderAudit(){
+  const out=$('scanOut');if(!out)return;
+  const inStock=S.stock.filter(v=>v.Status==='In Stock');
+  const seen={};audit.scans.forEach(s=>{if(s.stockId)seen[s.stockId]=s;});
+  const found=inStock.filter(v=>seen[v.StockId]);
+  const missing=inStock.filter(v=>!seen[v.StockId]);
+  const soldButHere=S.stock.filter(v=>v.Status!=='In Stock'&&seen[v.StockId]);
+  const unknown=audit.scans.filter(s=>!s.stockId);
+  const vrow=v=>`<tr><td>${esc(v.ModelName)}</td><td>${esc(v.Color)}</td><td><b>${esc(v.ChassisNo)}</b></td></tr>`;
+  out.innerHTML=`<div class="grid">
+    <div class="stat"><div class="k">In stock (system)</div><div class="v">${inStock.length}</div></div>
+    <div class="stat hl"><div class="k">Found</div><div class="v">${found.length}</div></div>
+    <div class="stat"><div class="k">Missing</div><div class="v" style="color:${missing.length?'var(--red)':'var(--green)'}">${missing.length}</div></div>
+    <div class="stat"><div class="k">Not in system</div><div class="v" style="color:${unknown.length?'var(--amber)':'inherit'}">${unknown.length}</div></div></div>
+  <p class="small muted">${audit.started?'Count started '+esc(audit.started)+'. Saved on this device, so you can close the app and carry on.':'Nothing scanned yet.'}</p>
+  ${missing.length?`<div class="card scroll"><h3 style="margin-top:0;color:var(--red)">Missing: in the system but not scanned (${missing.length})</h3><table class="tbl"><tr><th>Model</th><th>Colour</th><th>Chassis</th></tr>${missing.map(vrow).join('')}</table></div>`:(inStock.length?'<div class="card" style="border-color:var(--green)"><b style="color:var(--green)">Every scooter in stock has been found.</b></div>':'')}
+  ${unknown.length?`<div class="card scroll"><h3 style="margin-top:0;color:var(--amber)">Scanned but not in the system (${unknown.length})</h3><table class="tbl">${unknown.map(s=>`<tr><td><b>${esc(s.code)}</b></td><td class="small muted">${esc(s.time)}</td><td><button class="btn sm" onclick="vehPrefill={ChassisNo:'${esc(norm(s.code))}'};go('vehicles')">Add to stock</button></td></tr>`).join('')}</table></div>`:''}
+  ${soldButHere.length?`<div class="card scroll"><h3 style="margin-top:0;color:var(--amber)">Marked Sold but found in the showroom (${soldButHere.length})</h3><table class="tbl">${soldButHere.map(v=>`<tr><td>${esc(v.ModelName)}</td><td><b>${esc(v.ChassisNo)}</b></td><td>bill ${esc(v.SoldInvoiceNo)}</td></tr>`).join('')}</table></div>`:''}
+  ${found.length?`<div class="card scroll"><h3 style="margin-top:0">Found (${found.length})</h3><table class="tbl">${found.map(vrow).join('')}</table></div>`:''}
+  <div class="row"><button class="btn ghost" onclick="printAudit()">Print count</button><button class="btn red" onclick="if(window.confirm('Clear this count and start again?')){audit={started:'',scans:[]};saveAudit();renderAudit();}">Start a new count</button></div>`;
+}
+function printAudit(){$('printArea').innerHTML=`<h2>${esc(S.settings.ShopName)}: stock check ${esc(audit.started)}</h2>`+$('scanOut').innerHTML.replace(/<div class="row">[\s\S]*$/,'');$('modalActions').innerHTML='';$('modal').classList.remove('hide');}
 
 /* ---------- start ---------- */
 renderNav();
