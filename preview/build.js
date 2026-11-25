@@ -40,4 +40,8 @@ PREVIEW: data stays in this browser only. The real system saves to Google Sheets
 `;
 const html = read('Index.html').replace('<body>', '<body>\n' + inject);
 fs.writeFileSync(path.join(__dirname, 'preview.html'), html);
-console.log('wrote preview/preview.html');
+// GitHub Pages serves docs/. Kept in its own folder: on Windows "index.html" and the
+// app's "Index.html" are the same file, so never write index.html at the repo root.
+fs.mkdirSync(path.join(root, 'docs'), { recursive: true });
+fs.writeFileSync(path.join(root, 'docs', 'index.html'), html);
+console.log('wrote preview/preview.html and docs/index.html');

@@ -1,3 +1,618 @@
-<!doctype html><meta charset="utf-8"><title>Master EV</title>
-<meta http-equiv="refresh" content="0; url=preview/preview.html">
-<a href="preview/preview.html">Open Master EV demo</a>
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<title>Master EV</title>
+<style>
+:root{--ink:#0b0b0b;--lime:#c6ff00;--bg:#f4f5f2;--card:#fff;--line:#e2e4de;--mute:#6b6f66;--red:#d93025;--green:#1e8e3e;--amber:#b06000}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:var(--ink);color:#fff;display:flex;align-items:center;gap:16px;padding:0 16px;position:sticky;top:0;z-index:5}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:21px;letter-spacing:-.04em;padding:9px 0;white-space:nowrap}
+.brand .mark{width:36px;height:36px;flex:0 0 auto}
+.brand b{color:var(--lime)}
+nav{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+nav button{background:none;border:0;color:#bbb;padding:16px 12px;font:inherit;font-weight:600;cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent}
+nav button:hover{color:#fff}
+nav button.on{color:var(--lime);border-bottom-color:var(--lime)}
+main{max-width:1200px;margin:0 auto;padding:20px 16px 60px}
+h2{margin:0 0 14px;font-size:20px}
+h3{margin:18px 0 10px;font-size:15px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+.stat .k{color:var(--mute);font-size:12px;text-transform:uppercase;letter-spacing:.4px}
+.stat .v{font-size:24px;font-weight:800;margin-top:4px}
+.stat.hl{background:var(--ink);color:#fff}.stat.hl .k{color:#aaa}.stat.hl .v{color:var(--lime)}
+label{display:block;font-size:12px;font-weight:600;color:var(--mute);margin-bottom:4px}
+input,select,textarea{width:100%;padding:8px 10px;border:1px solid #cfd2ca;border-radius:6px;font:inherit;background:#fff}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--lime);border-color:var(--ink)}
+.form{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+.form .wide{grid-column:1/-1}
+.btn{background:var(--ink);color:#fff;border:0;border-radius:6px;padding:9px 16px;font:inherit;font-weight:700;cursor:pointer}
+.btn.lime{background:var(--lime);color:var(--ink)}
+.btn.ghost{background:#fff;color:var(--ink);border:1px solid #cfd2ca}
+.btn.red{background:#fff;color:var(--red);border:1px solid var(--red)}
+.btn.sm{padding:5px 10px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:wait}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+.row>*{flex:0 0 auto}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;background:#f0f1ec;font-size:12px;color:var(--mute);padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
+.tbl td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.tbl td.n,.tbl th.n{text-align:right;white-space:nowrap}
+.tbl input,.tbl select{padding:5px 6px}
+.scroll{overflow-x:auto}
+.pill{display:inline-block;padding:1px 8px;border-radius:20px;font-size:11px;font-weight:700}
+.p-in{background:#e6f4ea;color:var(--green)}.p-sold{background:#eee;color:#555}.p-cx{background:#fce8e6;color:var(--red)}
+.p-gst{background:var(--ink);color:var(--lime)}.p-nor{background:#e8eaed;color:#333}
+.seg{display:inline-flex;border:2px solid var(--ink);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:9px 18px;font:inherit;font-weight:800;cursor:pointer}
+.seg button.on{background:var(--ink);color:var(--lime)}
+.totals{margin-left:auto;max-width:340px}
+.totals div{display:flex;justify-content:space-between;padding:3px 0}
+.totals .big{font-size:20px;font-weight:800;border-top:2px solid var(--ink);margin-top:6px;padding-top:8px}
+.muted{color:var(--mute)}.small{font-size:12px}
+.hide{display:none!important}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:8px;font-weight:600;z-index:50;max-width:90vw}
+#toast.err{background:var(--red)}
+#loading{position:fixed;inset:0;background:rgba(244,245,242,.7);display:flex;align-items:center;justify-content:center;font-weight:700;z-index:40}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:30;overflow:auto;padding:20px 12px}
+.modal .box{background:#fff;max-width:900px;margin:0 auto;border-radius:10px;padding:16px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-bottom:12px}
+
+/* invoice */
+.inv{font-size:12px;color:#000;border:1px solid #000;padding:0}
+.inv .ih{display:flex;justify-content:space-between;gap:12px;padding:12px;border-bottom:2px solid #000}
+.inv .shop{font-size:22px;font-weight:800}
+.inv .title{text-align:center;font-weight:800;font-size:15px;letter-spacing:1px;padding:6px;border-bottom:1px solid #000;background:#f2f2f2}
+.inv .parties{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid #000}
+.inv .parties>div{padding:8px 12px}.inv .parties>div+div{border-left:1px solid #000}
+.inv table{width:100%;border-collapse:collapse}
+.inv th,.inv td{border:1px solid #000;padding:4px 6px;vertical-align:top}
+.inv th{background:#f2f2f2;font-size:11px}
+.inv td.n,.inv th.n{text-align:right;white-space:nowrap}
+.inv .sub{font-size:11px;color:#333}
+.inv .foot{display:grid;grid-template-columns:1.3fr 1fr;border-top:1px solid #000}
+.inv .foot>div{padding:8px 12px}.inv .foot>div+div{border-left:1px solid #000}
+.inv .sign{display:flex;justify-content:space-between;padding:40px 12px 10px;border-top:1px solid #000}
+.inv .cxmark{color:var(--red);font-weight:800;text-align:center;font-size:18px;padding:6px;border-bottom:1px solid #000}
+@media print{
+  @page{size:A4;margin:10mm}
+  body{background:#fff}
+  body *{visibility:hidden}
+  #printArea,#printArea *{visibility:visible}
+  #printArea{position:absolute;left:0;top:0;width:100%}
+  .modal{position:static;background:none;padding:0}
+}
+@media (max-width:640px){
+  header{flex-direction:column;align-items:stretch;gap:0}
+  .brand{padding:10px 0 0}
+  .inv .parties,.inv .foot{grid-template-columns:1fr}
+  .inv .parties>div+div,.inv .foot>div+div{border-left:0;border-top:1px solid #000}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><svg class="mark" viewBox="0 0 168 168" aria-hidden="true">
+    <rect x="4" y="4" width="160" height="160" rx="36" fill="#141414" stroke="#c6ff00" stroke-width="6"/>
+    <path d="M38 124 V46 L66 46 L84 86 L102 46 L130 46 V124" fill="none" stroke="#f5f5f5" stroke-width="12" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M92 52 L70 94 H86 L76 130 L106 82 H90 L100 52 Z" fill="#c6ff00"/>
+  </svg><span>Master<b>.</b>EV</span></div>
+  <nav id="nav"></nav>
+</header>
+<main id="main"></main>
+<div id="modal" class="modal hide"><div class="box"><div class="toolbar">
+  <button class="btn lime" onclick="window.print()">Print</button>
+  <span id="modalActions"></span>
+  <button class="btn ghost" onclick="closeModal()">Close</button>
+</div><div id="printArea"></div></div></div>
+<div id="scanModal" class="modal hide"><div class="box" style="max-width:520px">
+  <div class="row" style="justify-content:space-between;align-items:center"><b style="font-size:16px">Scan barcode or QR code</b><button class="btn ghost sm" onclick="closeScanner()">Close</button></div>
+  <div id="reader" style="margin-top:10px;border-radius:8px;overflow:hidden;background:#000"></div>
+  <p id="scanMsg" class="small muted"></p>
+  <label class="btn" style="display:inline-block;color:#fff;font-size:14px">Take a photo of the code<input type="file" accept="image/*" capture="environment" class="hide" onchange="scanPhoto(this)"></label>
+  <div class="row" style="margin-top:12px;flex-wrap:nowrap"><input id="scanManual" placeholder="Or type the number" onkeydown="if(event.key==='Enter')scanDone(this.value)"><button class="btn sm" onclick="scanDone($('scanManual').value)">Use</button></div>
+</div></div>
+<div id="loading">Loading Master EV...</div>
+<div id="toast" class="hide"></div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+const TABS = [['dash','Dashboard'],['scan','Scanner'],['bill','New Bill'],['vehicles','Vehicles'],['acc','Accessories'],['models','Models'],['invoices','Invoices'],['reports','Reports'],['settings','Settings']];
+const STATES = [['01','Jammu and Kashmir'],['02','Himachal Pradesh'],['03','Punjab'],['04','Chandigarh'],['05','Uttarakhand'],['06','Haryana'],['07','Delhi'],['08','Rajasthan'],['09','Uttar Pradesh'],['10','Bihar'],['11','Sikkim'],['12','Arunachal Pradesh'],['13','Nagaland'],['14','Manipur'],['15','Mizoram'],['16','Tripura'],['17','Meghalaya'],['18','Assam'],['19','West Bengal'],['20','Jharkhand'],['21','Odisha'],['22','Chhattisgarh'],['23','Madhya Pradesh'],['24','Gujarat'],['26','Dadra and Nagar Haveli and Daman and Diu'],['27','Maharashtra'],['29','Karnataka'],['30','Goa'],['31','Lakshadweep'],['32','Kerala'],['33','Tamil Nadu'],['34','Puducherry'],['35','Andaman and Nicobar Islands'],['36','Telangana'],['37','Andhra Pradesh'],['38','Ladakh'],['97','Other Territory']];
+const PAY_MODES = ['Cash','UPI','Card','Bank Transfer','Cheque','Finance / Loan'];
+let S = {settings:{},models:[],stock:[],accessories:[],dashboard:{}};
+let tab = 'dash';
+let bill = null;
+
+/* ---------- helpers ---------- */
+function call(fn){const args=[].slice.call(arguments,1);return new Promise((res,rej)=>{google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn].apply(null,args);});}
+function esc(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function num(v){const n=Number(v);return isFinite(n)?n:0;}
+function r2(n){return Math.round((n+Number.EPSILON)*100)/100;}
+function money(n){return '₹'+num(n).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function money0(n){return '₹'+Math.round(num(n)).toLocaleString('en-IN');}
+function today(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function fmtDate(s){s=String(s||'').slice(0,10);const p=s.split('-');return p.length===3?p[2]+'-'+p[1]+'-'+p[0]:s;}
+function $(id){return document.getElementById(id);}
+function toast(msg,err){const t=$('toast');t.textContent=msg;t.className=err?'err':'';clearTimeout(t._h);t._h=setTimeout(()=>t.className='hide',err?6000:3000);}
+function fail(e){busy(false);toast((e&&e.message)||String(e),true);}
+function busy(on,msg){$('loading').textContent=msg||'Working...';$('loading').classList.toggle('hide',!on);}
+function stateName(code){const s=STATES.find(x=>x[0]===code);return s?s[1]:'';}
+function stateOpts(sel){return '<option value="">Select state</option>'+STATES.map(s=>`<option value="${s[0]}"${s[0]===sel?' selected':''}>${s[0]} ${esc(s[1])}</option>`).join('');}
+function modelName(m){return [m.Brand,m.Model,m.Variant].filter(Boolean).join(' ');}
+
+function inWords(n){
+  n=Math.round(num(n));if(n===0)return 'Zero';
+  const a=['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+  const b=['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+  const two=x=>x<20?a[x]:b[Math.floor(x/10)]+(x%10?' '+a[x%10]:'');
+  const three=x=>x>=100?a[Math.floor(x/100)]+' Hundred'+(x%100?' '+two(x%100):''):two(x);
+  const out=[];const cr=Math.floor(n/1e7);n%=1e7;const lk=Math.floor(n/1e5);n%=1e5;const th=Math.floor(n/1e3);n%=1e3;
+  if(cr)out.push(inWords(cr)+' Crore');if(lk)out.push(two(lk)+' Lakh');if(th)out.push(two(th)+' Thousand');if(n)out.push(three(n));
+  return out.join(' ');
+}
+
+/** Same maths as calc_() in Code.gs. */
+function calc(items,billType,inclusive,interState){
+  const t={taxable:0,cgst:0,sgst:0,igst:0,lines:[]};
+  items.forEach(it=>{
+    const qty=num(it.qty),price=num(it.unitPrice),gross=r2(qty*price);
+    const rate=billType==='GST'?num(it.gstRate):0;
+    const taxable=rate&&inclusive?r2(gross/(1+rate/100)):gross;
+    const tax=r2(taxable*rate/100);
+    let c=0,s=0,i=0;if(interState)i=tax;else{c=r2(tax/2);s=r2(tax-c);}
+    t.lines.push({taxable,cgst:c,sgst:s,igst:i,lineTotal:r2(taxable+tax)});
+    t.taxable+=taxable;t.cgst+=c;t.sgst+=s;t.igst+=i;
+  });
+  ['taxable','cgst','sgst','igst'].forEach(k=>t[k]=r2(t[k]));
+  const exact=r2(t.taxable+t.cgst+t.sgst+t.igst);t.total=Math.round(exact);t.roundOff=r2(t.total-exact);
+  return t;
+}
+
+/* ---------- shell ---------- */
+function renderNav(){$('nav').innerHTML=TABS.map(([k,l])=>`<button class="${k===tab?'on':''}" onclick="go('${k}')">${l}</button>`).join('');}
+function go(k){tab=k;renderNav();render();window.scrollTo(0,0);}
+function render(){({dash:renderDash,scan:renderScan,bill:renderBill,vehicles:renderVehicles,acc:renderAcc,models:renderModels,invoices:renderInvoices,reports:renderReports,settings:renderSettings})[tab]();}
+function reload(){return call('getBootstrap').then(d=>{S=d;busy(false);render();}).catch(fail);}
+function closeModal(){$('modal').classList.add('hide');$('printArea').innerHTML='';}
+
+/* ---------- dashboard ---------- */
+function renderDash(){
+  const d=S.dashboard||{};const set=S.settings;
+  const warn=!set.GSTIN||!set.StateCode?`<div class="card" style="border-color:var(--amber)"><b>Finish setup:</b> add your shop GSTIN and state in <a href="#" onclick="go('settings');return false">Settings</a> before making GST bills.</div>`:'';
+  $('main').innerHTML=warn+`
+  <h2>${esc(set.ShopName||'Master EV')}</h2>
+  <div class="grid">
+    <div class="stat hl"><div class="k">Today's sales</div><div class="v">${money0(d.todaySales)}</div><div class="small">${d.todayBills||0} bills</div></div>
+    <div class="stat"><div class="k">This month</div><div class="v">${money0(d.monthSales)}</div><div class="small muted">${d.monthBills||0} bills, ${d.monthVehiclesSold||0} vehicles</div></div>
+    <div class="stat"><div class="k">GST this month</div><div class="v">${money0(d.monthGST)}</div></div>
+    <div class="stat"><div class="k">Vehicles in stock</div><div class="v">${d.vehiclesInStock||0}</div><div class="small muted">Cost value ${money0(d.stockValue)}</div></div>
+    <div class="stat"><div class="k">Balance due</div><div class="v" style="color:${d.pendingBalance>0?'var(--red)':'inherit'}">${money0(d.pendingBalance)}</div></div>
+  </div>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-top:16px">
+    <div class="card"><h3 style="margin-top:0">Stock by model</h3>${(d.byModel||[]).length?`<table class="tbl">${d.byModel.map(r=>`<tr><td>${esc(r.model)}</td><td class="n"><b>${r.count}</b></td></tr>`).join('')}</table>`:'<p class="muted">No vehicles in stock yet.</p>'}
+      ${(d.lowAccessories||[]).length?`<h3>Low accessory stock</h3><table class="tbl">${d.lowAccessories.map(a=>`<tr><td>${esc(a.name)}</td><td class="n" style="color:var(--red)"><b>${a.qty}</b></td></tr>`).join('')}</table>`:''}</div>
+    <div class="card"><h3 style="margin-top:0">Recent bills</h3>${(d.recent||[]).length?`<div class="scroll"><table class="tbl"><tr><th>No.</th><th>Date</th><th>Customer</th><th class="n">Total</th></tr>${d.recent.map(r=>`<tr><td><a href="#" onclick="openInvoice('${esc(r.no)}');return false">${esc(r.no)}</a> <span class="pill ${r.type==='GST'?'p-gst':'p-nor'}">${r.type==='GST'?'GST':'Normal'}</span></td><td>${fmtDate(r.date)}</td><td>${esc(r.name)}</td><td class="n">${money0(r.total)}${r.balance>0?`<div class="small" style="color:var(--red)">due ${money0(r.balance)}</div>`:''}</td></tr>`).join('')}</table></div>`:'<p class="muted">No bills yet.</p>'}</div>
+  </div>
+  <div class="row"><button class="btn lime" onclick="newBill('GST')">+ New GST bill</button><button class="btn" onclick="newBill('NORMAL')">+ New normal bill</button><button class="btn ghost" onclick="busy(true,'Refreshing...');reload()">Refresh</button></div>`;
+}
+
+/* ---------- billing ---------- */
+function blankBill(type){return {billType:type,date:today(),customer:{name:'',phone:'',address:'',gstin:'',stateCode:S.settings.StateCode||''},items:[],pricesIncludeGST:(S.settings.PricesIncludeGST||'YES').toUpperCase()!=='NO',paymentMode:'Cash',amountPaid:'',notes:''};}
+function newBill(type){bill=blankBill(type);go('bill');}
+function renderBill(){
+  if(!bill)bill=blankBill('GST');
+  const g=bill.billType==='GST';const c=bill.customer;
+  const used=bill.items.filter(i=>i.itemType==='VEHICLE').map(i=>i.refId);
+  const avail=S.stock.filter(v=>v.Status==='In Stock'&&used.indexOf(v.StockId)<0);
+  const acc=S.accessories.filter(a=>num(a.Qty)>0);
+  $('main').innerHTML=`
+  <div class="row" style="justify-content:space-between;margin-bottom:14px"><h2 style="margin:0">New bill</h2>
+    <div class="seg"><button class="${g?'on':''}" onclick="setType('GST')">GST BILL</button><button class="${!g?'on':''}" onclick="setType('NORMAL')">NORMAL BILL</button></div></div>
+  <div class="card"><div class="form">
+    <div><label>Bill date</label><input type="date" value="${esc(bill.date)}" onchange="bill.date=this.value"></div>
+    <div><label>Customer phone</label><input value="${esc(c.phone)}" inputmode="tel" onchange="bill.customer.phone=this.value.trim();lookupCustomer()" placeholder="Type phone to find old customer"></div>
+    <div><label>Customer name *</label><input id="cName" value="${esc(c.name)}" oninput="bill.customer.name=this.value"></div>
+    <div class="wide"><label>Address</label><input id="cAddr" value="${esc(c.address)}" oninput="bill.customer.address=this.value"></div>
+    ${g?`<div><label>Customer GSTIN (business buyers only)</label><input id="cGstin" value="${esc(c.gstin)}" oninput="onGstin(this.value)" style="text-transform:uppercase"></div>
+    <div><label>Place of supply (state)</label><select id="cState" onchange="bill.customer.stateCode=this.value;renderTotals()">${stateOpts(c.stateCode)}</select></div>`:''}
+  </div></div>
+  <div class="card">
+    <div class="row" style="margin-bottom:12px">
+      <div style="flex:1 1 260px"><label>Add a vehicle from stock</label><select id="addVeh"><option value="">${avail.length?'Pick by model / chassis':'No vehicles in stock'}</option>${avail.map(v=>`<option value="${esc(v.StockId)}">${esc(v.ModelName)} ${v.Color?'('+esc(v.Color)+')':''} | Ch ${esc(v.ChassisNo)}</option>`).join('')}</select></div>
+      <button class="btn" onclick="addVehicleLine()">Add vehicle</button>
+      <button class="btn ghost" onclick="openScanner(scanToBill)">Scan vehicle</button>
+      <div style="flex:1 1 200px"><label>Add an accessory</label><select id="addAcc"><option value="">${acc.length?'Pick item':'No accessories in stock'}</option>${acc.map(a=>`<option value="${esc(a.ItemId)}">${esc(a.Name)} (${num(a.Qty)} left)</option>`).join('')}</select></div>
+      <button class="btn" onclick="addAccLine()">Add item</button>
+      <button class="btn ghost" onclick="addOtherLine()">+ Other line</button>
+    </div>
+    <div class="scroll"><table class="tbl" id="lines"></table></div>
+    ${g?`<label style="display:flex;gap:6px;align-items:center;margin-top:10px;font-size:13px;color:var(--ink)"><input type="checkbox" style="width:auto" ${bill.pricesIncludeGST?'checked':''} onchange="bill.pricesIncludeGST=this.checked;renderLines()"> Prices entered include GST</label>`:''}
+    <div class="totals" id="totals"></div>
+  </div>
+  <div class="card"><div class="form">
+    <div><label>Payment mode</label><select onchange="bill.paymentMode=this.value">${PAY_MODES.map(m=>`<option${m===bill.paymentMode?' selected':''}>${m}</option>`).join('')}</select></div>
+    <div><label>Amount received now (blank = full)</label><input type="number" min="0" step="0.01" value="${esc(bill.amountPaid)}" oninput="bill.amountPaid=this.value;renderTotals()"></div>
+    <div class="wide"><label>Notes (finance, registration, delivery)</label><input value="${esc(bill.notes)}" oninput="bill.notes=this.value"></div>
+  </div>
+  <div class="row" style="margin-top:14px"><button class="btn lime" id="saveBtn" onclick="saveBill()">Save &amp; print ${g?'GST':'normal'} bill</button><button class="btn ghost" onclick="if(confirmClear())newBill(bill.billType)">Clear</button></div></div>`;
+  renderLines();
+}
+function confirmClear(){return !bill.items.length||window.confirm('Clear this bill?');}
+function setType(t){bill.billType=t;renderBill();}
+function onGstin(v){v=v.toUpperCase().trim();bill.customer.gstin=v;const code=v.slice(0,2);if(/^\d\d$/.test(code)&&stateName(code)){bill.customer.stateCode=code;const s=$('cState');if(s)s.value=code;renderTotals();}}
+function lookupCustomer(){
+  const p=bill.customer.phone;if(!p)return;
+  call('findCustomer',p).then(c=>{if(!c)return;const b=bill.customer;
+    b.name=b.name||c.Name;b.address=b.address||c.Address;b.gstin=b.gstin||c.GSTIN;if(c.StateCode)b.stateCode=String(c.StateCode).padStart(2,'0');
+    renderBill();toast('Returning customer: '+c.Name);}).catch(fail);
+}
+function addVehicleLine(){
+  const id=$('addVeh').value;if(!id)return toast('Pick a vehicle first',true);
+  bill.items.push(vehicleItem(id));
+  renderBill();
+}
+function scanToBill(code){
+  const used=bill.items.filter(i=>i.itemType==='VEHICLE').map(i=>i.refId);
+  const hits=findStock(code);
+  const ok=hits.filter(v=>v.Status==='In Stock'&&used.indexOf(v.StockId)<0);
+  if(ok.length===1){bill.items.push(vehicleItem(ok[0].StockId));renderBill();return toast('Added '+ok[0].ModelName);}
+  if(!hits.length)return toast('No vehicle found for '+code,true);
+  if(ok.length>1)return toast('More than one vehicle matches '+code+'. Pick it from the list.',true);
+  toast(used.indexOf(hits[0].StockId)>=0?'That vehicle is already on this bill':'That vehicle is already sold ('+hits[0].SoldInvoiceNo+')',true);
+}
+function vehicleItem(id){
+  const v=S.stock.find(x=>x.StockId===id);const m=S.models.find(x=>x.ModelId===v.ModelId)||{};
+  return {itemType:'VEHICLE',refId:id,description:v.ModelName+(v.Color?' - '+v.Color:''),chassisNo:v.ChassisNo,motorNo:v.MotorNo,batteryNo:v.BatteryNo,chargerNo:v.ChargerNo,
+    hsn:m.HSN||S.settings.DefaultVehicleHSN||'8711',qty:1,unitPrice:num(m.SalePrice),gstRate:m.GSTRate!==''&&m.GSTRate!=null?num(m.GSTRate):num(S.settings.DefaultVehicleGSTRate||5)};
+}
+function addAccLine(){
+  const id=$('addAcc').value;if(!id)return toast('Pick an item first',true);
+  const a=S.accessories.find(x=>x.ItemId===id);
+  bill.items.push({itemType:'ACCESSORY',refId:id,description:a.Name,hsn:a.HSN,qty:1,unitPrice:num(a.SalePrice),gstRate:num(a.GSTRate)});
+  renderLines();
+}
+function addOtherLine(){bill.items.push({itemType:'OTHER',refId:'',description:'',hsn:'',qty:1,unitPrice:0,gstRate:0});renderLines();}
+function removeLine(i){bill.items.splice(i,1);renderBill();}
+function setLine(i,k,v){bill.items[i][k]=v;renderTotals();}
+function renderLines(){
+  const g=bill.billType==='GST';
+  if(!bill.items.length){$('lines').innerHTML='<tr><td class="muted">No items yet. Add a vehicle, an accessory or an other line (for example registration or insurance charges).</td></tr>';renderTotals();return;}
+  $('lines').innerHTML=`<tr><th>#</th><th>Description</th>${g?'<th>HSN</th>':''}<th class="n">Qty</th><th class="n">Price (${g&&bill.pricesIncludeGST?'incl. GST':g?'excl. GST':'each'})</th>${g?'<th class="n">GST %</th><th class="n">Taxable</th><th class="n">GST</th>':''}<th class="n">Amount</th><th></th></tr>`+
+  bill.items.map((it,i)=>`<tr><td>${i+1}</td>
+    <td style="min-width:200px"><input value="${esc(it.description)}" oninput="setLine(${i},'description',this.value)">${it.itemType==='VEHICLE'?`<div class="small muted">Chassis ${esc(it.chassisNo)} | Motor ${esc(it.motorNo)} | Battery ${esc(it.batteryNo)}</div>`:''}</td>
+    ${g?`<td style="width:90px"><input value="${esc(it.hsn)}" oninput="setLine(${i},'hsn',this.value)"></td>`:''}
+    <td style="width:70px"><input type="number" min="1" value="${esc(it.qty)}" ${it.itemType==='VEHICLE'?'disabled':''} oninput="setLine(${i},'qty',this.value)"></td>
+    <td style="width:130px"><input type="number" min="0" step="0.01" value="${esc(it.unitPrice)}" oninput="setLine(${i},'unitPrice',this.value)"></td>
+    ${g?`<td style="width:80px"><select onchange="setLine(${i},'gstRate',this.value)">${[0,5,12,18,28].map(r=>`<option${num(it.gstRate)===r?' selected':''}>${r}</option>`).join('')}</select></td><td class="n" id="tx${i}"></td><td class="n" id="gs${i}"></td>`:''}
+    <td class="n" id="lt${i}"></td><td><button class="btn red sm" onclick="removeLine(${i})">x</button></td></tr>`).join('');
+  renderTotals();
+}
+function interState(){const c=bill.customer.stateCode,s=S.settings.StateCode;return bill.billType==='GST'&&!!c&&!!s&&c!==s;}
+function renderTotals(){
+  const g=bill.billType==='GST';const inter=interState();
+  const t=calc(bill.items,bill.billType,bill.pricesIncludeGST,inter);
+  t.lines.forEach((l,i)=>{if($('lt'+i))$('lt'+i).textContent=money(l.lineTotal);if($('tx'+i))$('tx'+i).textContent=money(l.taxable);if($('gs'+i))$('gs'+i).textContent=money(l.cgst+l.sgst+l.igst);});
+  const paid=bill.amountPaid===''?t.total:num(bill.amountPaid);
+  $('totals').innerHTML=(g?`<div><span>Taxable value</span><span>${money(t.taxable)}</span></div>`+(inter?`<div><span>IGST</span><span>${money(t.igst)}</span></div>`:`<div><span>CGST</span><span>${money(t.cgst)}</span></div><div><span>SGST</span><span>${money(t.sgst)}</span></div>`)+
+    `<div class="small muted"><span>${inter?'Inter-state sale: IGST applies':'Same-state sale: CGST + SGST'}</span></div>`:'')+
+    `<div><span>Round off</span><span>${money(t.roundOff)}</span></div><div class="big"><span>Total</span><span>${money(t.total)}</span></div>`+
+    (paid!==t.total?`<div><span>Received</span><span>${money(paid)}</span></div><div style="color:var(--red);font-weight:700"><span>Balance due</span><span>${money(t.total-paid)}</span></div>`:'');
+}
+function saveBill(){
+  if(!bill.customer.name.trim())return toast('Enter the customer name',true);
+  if(!bill.items.length)return toast('Add at least one item',true);
+  if(bill.items.some(i=>!String(i.description).trim()))return toast('Every line needs a description',true);
+  if(bill.billType==='GST'&&!S.settings.GSTIN)return toast('Add your shop GSTIN in Settings first',true);
+  const payload=JSON.parse(JSON.stringify(bill));payload.customer.state=stateName(payload.customer.stateCode);
+  busy(true,'Saving bill...');
+  call('createInvoice',payload).then(r=>{bill=null;toast('Saved '+r.invoice.InvoiceNo);showInvoice(r);return reload();}).catch(fail);
+}
+
+/* ---------- invoice view ---------- */
+function openInvoice(no){busy(true,'Opening bill...');call('getInvoice',no).then(r=>{busy(false);showInvoice(r);}).catch(fail);}
+function showInvoice(r){
+  $('printArea').innerHTML=invoiceHtml(r);
+  const inv=r.invoice;const active=inv.Status!=='Cancelled';
+  $('modalActions').innerHTML=active?`${num(inv.Balance)>0?`<button class="btn" onclick="payInvoice('${esc(inv.InvoiceNo)}',${num(inv.Balance)})">Record payment</button> `:''}<button class="btn red" onclick="cancelInv('${esc(inv.InvoiceNo)}')">Cancel bill</button>`:'';
+  $('modal').classList.remove('hide');$('modal').scrollTop=0;
+}
+function invoiceHtml(r){
+  const inv=r.invoice,items=r.items,s=r.settings;const g=inv.BillType==='GST';const inter=num(inv.IGST)>0;
+  const head=`<div class="ih"><div><div class="shop">${esc(s.ShopName)}</div>${s.Tagline?`<div>${esc(s.Tagline)}</div>`:''}<div>${esc(s.Address)}</div>
+    <div>${s.Phone?'Ph: '+esc(s.Phone):''}${s.Email?' | '+esc(s.Email):''}</div>${g?`<div><b>GSTIN: ${esc(s.GSTIN)}</b> | State: ${esc(s.State)} (${esc(s.StateCode)})</div>`:''}</div>
+    <div style="text-align:right"><div><b>${g?'Invoice':'Bill'} No:</b> ${esc(inv.InvoiceNo)}</div><div><b>Date:</b> ${fmtDate(inv.Date)}</div>${g?`<div><b>Place of supply:</b> ${esc(inv.PlaceOfSupply)} (${esc(inv.StateCode)})</div><div>Reverse charge: No</div>`:''}</div></div>`;
+  const parties=`<div class="parties"><div><b>Bill to</b><div style="font-size:14px;font-weight:700">${esc(inv.CustomerName)}</div><div>${esc(inv.Address)}</div>${inv.Phone?`<div>Ph: ${esc(inv.Phone)}</div>`:''}${g&&inv.CustomerGSTIN?`<div><b>GSTIN: ${esc(inv.CustomerGSTIN)}</b></div>`:''}</div>
+    <div><b>Payment</b><div>Mode: ${esc(inv.PaymentMode)}</div><div>Received: ${money(inv.AmountPaid)}</div>${num(inv.Balance)>0?`<div><b>Balance due: ${money(inv.Balance)}</b></div>`:''}${inv.Notes?`<div class="sub">${esc(inv.Notes)}</div>`:''}</div></div>`;
+  const desc=it=>`<b>${esc(it.Description)}</b>${it.ChassisNo?`<div class="sub">Chassis No: ${esc(it.ChassisNo)}<br>Motor No: ${esc(it.MotorNo)}${it.BatteryNo?'<br>Battery No: '+esc(it.BatteryNo):''}</div>`:''}`;
+  let table;
+  if(g){
+    table=`<table><tr><th>#</th><th>Description</th><th>HSN</th><th class="n">Qty</th><th class="n">Rate</th><th class="n">Taxable</th><th class="n">GST %</th>${inter?'<th class="n">IGST</th>':'<th class="n">CGST</th><th class="n">SGST</th>'}<th class="n">Total</th></tr>`+
+      items.map(it=>`<tr><td>${it.Line}</td><td>${desc(it)}</td><td>${esc(it.HSN)}</td><td class="n">${num(it.Qty)}</td><td class="n">${money(num(it.Taxable)/(num(it.Qty)||1))}</td><td class="n">${money(it.Taxable)}</td><td class="n">${num(it.GSTRate)}%</td>${inter?`<td class="n">${money(it.IGST)}</td>`:`<td class="n">${money(it.CGST)}</td><td class="n">${money(it.SGST)}</td>`}<td class="n">${money(it.LineTotal)}</td></tr>`).join('')+
+      `<tr><td colspan="5" class="n"><b>Total</b></td><td class="n"><b>${money(inv.Taxable)}</b></td><td></td>${inter?`<td class="n"><b>${money(inv.IGST)}</b></td>`:`<td class="n"><b>${money(inv.CGST)}</b></td><td class="n"><b>${money(inv.SGST)}</b></td>`}<td class="n"><b>${money(num(inv.Total)-num(inv.RoundOff))}</b></td></tr></table>`;
+    const byRate={};items.forEach(it=>{const k=num(it.GSTRate);const b=byRate[k]||(byRate[k]={tx:0,c:0,s:0,i:0});b.tx+=num(it.Taxable);b.c+=num(it.CGST);b.s+=num(it.SGST);b.i+=num(it.IGST);});
+    table+=`<table style="margin-top:-1px"><tr><th>GST rate</th><th class="n">Taxable</th>${inter?'<th class="n">IGST</th>':'<th class="n">CGST</th><th class="n">SGST</th>'}<th class="n">Total tax</th></tr>`+
+      Object.keys(byRate).sort((a,b)=>a-b).map(k=>{const b=byRate[k];return `<tr><td>${k}%</td><td class="n">${money(b.tx)}</td>${inter?`<td class="n">${money(b.i)}</td>`:`<td class="n">${money(b.c)} (${k/2}%)</td><td class="n">${money(b.s)} (${k/2}%)</td>`}<td class="n">${money(b.c+b.s+b.i)}</td></tr>`;}).join('')+'</table>';
+  }else{
+    table=`<table><tr><th>#</th><th>Description</th><th class="n">Qty</th><th class="n">Rate</th><th class="n">Amount</th></tr>`+
+      items.map(it=>`<tr><td>${it.Line}</td><td>${desc(it)}</td><td class="n">${num(it.Qty)}</td><td class="n">${money(it.UnitPrice)}</td><td class="n">${money(it.LineTotal)}</td></tr>`).join('')+'</table>';
+  }
+  const foot=`<div class="foot"><div><b>Amount in words:</b><div>Rupees ${inWords(inv.Total)} Only</div>${s.BankDetails?`<div style="margin-top:8px"><b>Bank details:</b> ${esc(s.BankDetails)}</div>`:''}${s.Terms?`<div class="sub" style="margin-top:8px"><b>Terms:</b> ${esc(s.Terms)}</div>`:''}</div>
+    <div>${g?`<div style="display:flex;justify-content:space-between"><span>Taxable value</span><span>${money(inv.Taxable)}</span></div><div style="display:flex;justify-content:space-between"><span>Total GST</span><span>${money(num(inv.CGST)+num(inv.SGST)+num(inv.IGST))}</span></div>`:''}
+    <div style="display:flex;justify-content:space-between"><span>Round off</span><span>${money(inv.RoundOff)}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:800;border-top:1px solid #000;margin-top:4px;padding-top:4px"><span>Grand total</span><span>${money(inv.Total)}</span></div></div></div>`;
+  const sign=`<div class="sign"><div>Customer signature</div><div style="text-align:right">For <b>${esc(s.ShopName)}</b><br><br>Authorised signatory</div></div>`;
+  return `<div class="inv">${head}<div class="title">${g?'TAX INVOICE':'BILL'}</div>${inv.Status==='Cancelled'?'<div class="cxmark">CANCELLED</div>':''}${parties}${table}${foot}${sign}</div>`;
+}
+function payInvoice(no,bal){
+  const amt=window.prompt('Amount received now (balance '+money(bal)+'):',bal);if(amt===null)return;
+  const mode=window.prompt('Payment mode (Cash, UPI, Card, Bank Transfer, Cheque):','Cash');if(mode===null)return;
+  busy(true,'Saving payment...');call('recordPayment',no,amt,mode).then(r=>{showInvoice(r);toast('Payment saved');return reload();}).catch(fail);
+}
+function cancelInv(no){
+  const why=window.prompt('Cancel bill '+no+'? Vehicles and items on it go back into stock.\n\nReason:');if(why===null)return;
+  busy(true,'Cancelling...');call('cancelInvoice',no,why).then(r=>{showInvoice(r);toast('Bill cancelled, stock returned');return reload();}).catch(fail);
+}
+
+/* ---------- vehicles ---------- */
+let vehFilter={status:'In Stock',q:''};
+let vehPrefill={};
+function renderVehicles(){
+  const models=S.models.filter(m=>String(m.Active).toUpperCase()!=='NO');
+  $('main').innerHTML=`<h2>Vehicles</h2>
+  <div class="card"><h3 style="margin-top:0">Add a vehicle to stock</h3>
+  ${models.length?'':'<p style="color:var(--red)">Add a model first in the Models tab (or load the Zelio range from the sheet menu).</p>'}
+  <div class="form" id="vform">
+    <div class="wide"><label>Model *</label><select name="ModelId"><option value="">Select model</option>${models.map(m=>`<option value="${esc(m.ModelId)}">${esc(modelName(m))} | ${money0(m.SalePrice)}</option>`).join('')}</select></div>
+    <div><label>Colour</label><input name="Color"></div>
+    ${[['ChassisNo','Chassis / VIN no. *'],['MotorNo','Motor no.'],['BatteryNo','Battery no.'],['ChargerNo','Charger no.']].map(([k,l])=>
+      `<div><label>${l}</label><div class="row" style="flex-wrap:nowrap"><input name="${k}" value="${esc(vehPrefill[k]||'')}" style="text-transform:uppercase;flex:1 1 auto;min-width:0"><button class="btn ghost sm" type="button" onclick="scanInto(this)">Scan</button></div></div>`).join('')}
+    <div><label>Supplier</label><input name="Supplier"></div>
+    <div><label>Purchase invoice no.</label><input name="PurchaseInvoiceNo"></div>
+    <div><label>Purchase date</label><input type="date" name="PurchaseDate" value="${today()}"></div>
+    <div><label>Cost price (blank = model cost)</label><input type="number" step="0.01" name="CostPrice"></div>
+    <div class="wide"><label>Notes</label><input name="Notes"></div>
+  </div><p class="small muted">Tip: tap Scan next to a number to read its barcode or QR code instead of typing it.</p><div class="row" style="margin-top:12px"><button class="btn lime" onclick="saveVehicle()">Add to stock</button></div></div>
+  <div class="card"><div class="row" style="margin-bottom:10px">
+    <div><label>Status</label><select onchange="vehFilter.status=this.value;vehTable()">${['In Stock','Sold','All'].map(s=>`<option${s===vehFilter.status?' selected':''}>${s}</option>`).join('')}</select></div>
+    <div style="flex:1 1 240px"><label>Search model, colour, chassis, motor, battery</label><input value="${esc(vehFilter.q)}" oninput="vehFilter.q=this.value;vehTable()"></div>
+  </div><div class="scroll" id="vtable"></div></div>`;
+  vehPrefill={};
+  vehTable();
+}
+function scanInto(btn){const inp=btn.previousElementSibling;openScanner(t=>{inp.value=t.trim().toUpperCase();toast('Scanned '+inp.value);});}
+function vehTable(){
+  const q=vehFilter.q.toLowerCase();
+  const rows=S.stock.filter(v=>(vehFilter.status==='All'||v.Status===vehFilter.status)&&(!q||[v.ModelName,v.Color,v.ChassisNo,v.MotorNo,v.BatteryNo,v.ChargerNo,v.Supplier].join(' ').toLowerCase().indexOf(q)>=0)).reverse();
+  $('vtable').innerHTML=`<div class="small muted" style="margin-bottom:6px">${rows.length} vehicles</div><table class="tbl"><tr><th>Model</th><th>Colour</th><th>Chassis</th><th>Motor</th><th>Battery</th><th>Purchased</th><th class="n">Cost</th><th>Status</th></tr>`+
+    rows.map(v=>`<tr><td>${esc(v.ModelName)}</td><td>${esc(v.Color)}</td><td><b>${esc(v.ChassisNo)}</b></td><td>${esc(v.MotorNo)}</td><td>${esc(v.BatteryNo)}</td><td>${fmtDate(v.PurchaseDate)}<div class="small muted">${esc(v.Supplier)}</div></td><td class="n">${money0(v.CostPrice)}</td>
+      <td>${v.Status==='In Stock'?'<span class="pill p-in">In stock</span>':`<span class="pill p-sold">Sold</span><div class="small"><a href="#" onclick="openInvoice('${esc(v.SoldInvoiceNo)}');return false">${esc(v.SoldInvoiceNo)}</a><br>${fmtDate(v.SoldDate)}</div>`}</td></tr>`).join('')+'</table>';
+}
+function formData(id){const o={};document.querySelectorAll('#'+id+' [name]').forEach(el=>o[el.name]=el.value.trim());return o;}
+function saveVehicle(){
+  const v=formData('vform');if(!v.ModelId)return toast('Pick a model',true);if(!v.ChassisNo)return toast('Enter the chassis number',true);
+  busy(true,'Adding vehicle...');call('addVehicle',v).then(r=>{toast('Added '+r.ChassisNo);return reload();}).catch(fail);
+}
+
+/* ---------- accessories ---------- */
+function renderAcc(){
+  $('main').innerHTML=`<h2>Accessories and spares</h2>
+  <div class="card"><h3 style="margin-top:0">Add a new item</h3><div class="form" id="aform">
+    <div><label>Item name *</label><input name="Name" placeholder="Helmet, charger, battery..."></div>
+    <div><label>HSN</label><input name="HSN"></div>
+    <div><label>GST %</label><select name="GSTRate">${[0,5,12,18,28].map(r=>`<option${r===18?' selected':''}>${r}</option>`).join('')}</select></div>
+    <div><label>Opening qty</label><input type="number" name="Qty" value="0"></div>
+    <div><label>Cost price</label><input type="number" step="0.01" name="CostPrice"></div>
+    <div><label>Sale price</label><input type="number" step="0.01" name="SalePrice"></div>
+  </div><div class="row" style="margin-top:12px"><button class="btn lime" onclick="saveAcc()">Add item</button></div></div>
+  <div class="card scroll"><table class="tbl"><tr><th>Item</th><th>HSN</th><th class="n">GST</th><th class="n">Cost</th><th class="n">Sale</th><th class="n">Qty</th><th>Adjust stock</th></tr>`+
+  S.accessories.map(a=>`<tr><td>${esc(a.Name)}</td><td>${esc(a.HSN)}</td><td class="n">${num(a.GSTRate)}%</td><td class="n">${money0(a.CostPrice)}</td><td class="n">${money0(a.SalePrice)}</td><td class="n" style="${num(a.Qty)<=2?'color:var(--red)':''}"><b>${num(a.Qty)}</b></td>
+    <td><div class="row"><input type="number" id="adj_${esc(a.ItemId)}" placeholder="+5 or -1" style="width:90px"><button class="btn sm" onclick="adjAcc('${esc(a.ItemId)}')">Save</button></div></td></tr>`).join('')+
+  (S.accessories.length?'':'<tr><td colspan="7" class="muted">No items yet.</td></tr>')+'</table></div>';
+}
+function saveAcc(){const a=formData('aform');if(!a.Name)return toast('Enter the item name',true);busy(true,'Adding item...');call('addAccessory',a).then(()=>{toast('Item added');return reload();}).catch(fail);}
+function adjAcc(id){const v=num($('adj_'+id).value);if(!v)return toast('Enter a number like 5 or -1',true);const note=v>0?'Purchase':'Manual reduction';busy(true,'Updating stock...');call('adjustAccessory',id,v,note).then(q=>{toast('Stock now '+q);return reload();}).catch(fail);}
+
+/* ---------- models ---------- */
+function renderModels(){
+  const s=S.settings;
+  $('main').innerHTML=`<h2>Models and price list</h2>
+  <div class="card"><h3 style="margin-top:0">Add a model</h3><div class="form" id="mform">
+    <div><label>Brand</label><input name="Brand" value="Zelio"></div>
+    <div><label>Model *</label><input name="Model"></div>
+    <div><label>Variant</label><input name="Variant" placeholder="60V/32AH Li-ion"></div>
+    <div><label>HSN</label><input name="HSN" value="${esc(s.DefaultVehicleHSN||'8711')}"></div>
+    <div><label>GST %</label><input type="number" name="GSTRate" value="${esc(s.DefaultVehicleGSTRate||5)}"></div>
+    <div><label>Cost price</label><input type="number" step="0.01" name="CostPrice"></div>
+    <div><label>Sale price (${(s.PricesIncludeGST||'YES').toUpperCase()==='NO'?'excl.':'incl.'} GST)</label><input type="number" step="0.01" name="SalePrice"></div>
+  </div><div class="row" style="margin-top:12px"><button class="btn lime" onclick="saveModel()">Add model</button></div></div>
+  <div class="card scroll"><p class="small muted" style="margin-top:0">Edit prices here and press Save on that row. Set Active to NO to hide a model from the Add vehicle list.</p>
+  <table class="tbl"><tr><th>Model</th><th>HSN</th><th class="n">GST %</th><th class="n">Cost</th><th class="n">Sale price</th><th class="n">In stock</th><th>Active</th><th></th></tr>`+
+  S.models.map(m=>{const n=S.stock.filter(v=>v.ModelId===m.ModelId&&v.Status==='In Stock').length;const id=esc(m.ModelId);return `<tr><td>${esc(modelName(m))}</td>
+    <td><input id="mh_${id}" value="${esc(m.HSN)}" style="width:80px"></td><td><input id="mg_${id}" type="number" value="${esc(m.GSTRate)}" style="width:60px"></td>
+    <td><input id="mc_${id}" type="number" value="${esc(m.CostPrice)}" style="width:100px"></td><td><input id="ms_${id}" type="number" value="${esc(m.SalePrice)}" style="width:100px"></td>
+    <td class="n">${n}</td><td><select id="ma_${id}">${['YES','NO'].map(x=>`<option${String(m.Active).toUpperCase()===x?' selected':''}>${x}</option>`).join('')}</select></td>
+    <td><button class="btn sm" onclick="updModel('${id}')">Save</button></td></tr>`;}).join('')+
+  (S.models.length?'':'<tr><td colspan="8" class="muted">No models yet. Add one above, or in the Google Sheet use the menu Master EV &gt; Load Zelio models.</td></tr>')+'</table></div>';
+}
+function saveModel(){const m=formData('mform');if(!m.Model)return toast('Enter the model name',true);busy(true,'Adding model...');call('addModel',m).then(()=>{toast('Model added');return reload();}).catch(fail);}
+function updModel(id){busy(true,'Saving...');call('updateModel',{ModelId:id,HSN:$('mh_'+id).value,GSTRate:$('mg_'+id).value,CostPrice:$('mc_'+id).value,SalePrice:$('ms_'+id).value,Active:$('ma_'+id).value}).then(()=>{toast('Saved');return reload();}).catch(fail);}
+
+/* ---------- invoices ---------- */
+let invFilter={q:'',type:'',month:''};
+function renderInvoices(){
+  $('main').innerHTML=`<h2>Invoices and past records</h2><div class="card"><div class="row">
+    <div style="flex:1 1 240px"><label>Search bill no., name, phone, GSTIN, chassis</label><input id="iq" value="${esc(invFilter.q)}" onkeydown="if(event.key==='Enter')searchInv()"></div>
+    <div><label>Type</label><select id="it"><option value="">All</option><option value="GST"${invFilter.type==='GST'?' selected':''}>GST</option><option value="NORMAL"${invFilter.type==='NORMAL'?' selected':''}>Normal</option></select></div>
+    <div><label>Month</label><input type="month" id="im" value="${esc(invFilter.month)}"></div>
+    <button class="btn" onclick="searchInv()">Search</button></div></div><div class="card scroll" id="ilist"><p class="muted">Loading...</p></div>`;
+  searchInv();
+}
+function searchInv(){
+  invFilter={q:$('iq').value.trim(),type:$('it').value,month:$('im').value};
+  call('listInvoices',invFilter).then(rows=>{
+    $('ilist').innerHTML=`<div class="small muted" style="margin-bottom:6px">${rows.length} bills${rows.length===500?' (showing latest 500)':''}</div><table class="tbl"><tr><th>Bill no.</th><th>Date</th><th>Customer</th><th>Phone</th><th class="n">Total</th><th class="n">Balance</th><th>Status</th></tr>`+
+    rows.map(r=>`<tr><td><a href="#" onclick="openInvoice('${esc(r.InvoiceNo)}');return false"><b>${esc(r.InvoiceNo)}</b></a> <span class="pill ${r.BillType==='GST'?'p-gst':'p-nor'}">${r.BillType==='GST'?'GST':'Normal'}</span></td><td>${fmtDate(r.Date)}</td><td>${esc(r.CustomerName)}</td><td>${esc(r.Phone)}</td><td class="n">${money(r.Total)}</td><td class="n" style="${num(r.Balance)>0?'color:var(--red)':''}">${num(r.Balance)?money(r.Balance):'-'}</td><td>${r.Status==='Cancelled'?'<span class="pill p-cx">Cancelled</span>':'<span class="pill p-in">Active</span>'}</td></tr>`).join('')+
+    (rows.length?'':'<tr><td colspan="7" class="muted">No bills found.</td></tr>')+'</table>';
+  }).catch(fail);
+}
+
+/* ---------- reports ---------- */
+let repMonth='';
+function renderReports(){
+  repMonth=repMonth||today().slice(0,7);
+  $('main').innerHTML=`<h2>Monthly report</h2><div class="card"><div class="row"><div><label>Month</label><input type="month" id="rm" value="${repMonth}"></div><button class="btn" onclick="repMonth=$('rm').value;loadReport()">Show</button><button class="btn ghost" onclick="printReport()">Print</button></div></div><div id="rep"><p class="muted">Loading...</p></div>`;
+  loadReport();
+}
+function loadReport(){
+  call('getMonthReport',repMonth).then(r=>{
+    const box=(t,o)=>`<div class="card"><h3 style="margin-top:0">${t}</h3><table class="tbl"><tr><td>Bills</td><td class="n">${o.bills}</td></tr>${t.indexOf('GST')===0?`<tr><td>Taxable value</td><td class="n">${money(o.taxable)}</td></tr><tr><td>CGST</td><td class="n">${money(o.cgst)}</td></tr><tr><td>SGST</td><td class="n">${money(o.sgst)}</td></tr><tr><td>IGST</td><td class="n">${money(o.igst)}</td></tr>`:''}<tr><td><b>Total billed</b></td><td class="n"><b>${money(o.total)}</b></td></tr></table></div>`;
+    $('rep').innerHTML=`<div id="repPrint"><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">${box('GST bills',r.gst)}${box('Normal bills',r.normal)}
+      <div class="card"><h3 style="margin-top:0">Money received</h3><table class="tbl">${r.payments.map(p=>`<tr><td>${esc(p.mode)}</td><td class="n">${money(p.amount)}</td></tr>`).join('')||'<tr><td class="muted">None</td></tr>'}</table><p class="small muted">${r.cancelled} cancelled bills not counted.</p></div></div>
+      <div class="card scroll"><h3 style="margin-top:0">HSN summary (GST bills, for GSTR-1)</h3><table class="tbl"><tr><th>HSN</th><th class="n">Rate</th><th class="n">Qty</th><th class="n">Taxable</th><th class="n">CGST</th><th class="n">SGST</th><th class="n">IGST</th><th class="n">Total</th></tr>${r.hsn.map(h=>`<tr><td>${esc(h.hsn)||'-'}</td><td class="n">${h.rate}%</td><td class="n">${h.qty}</td><td class="n">${money(h.taxable)}</td><td class="n">${money(h.cgst)}</td><td class="n">${money(h.sgst)}</td><td class="n">${money(h.igst)}</td><td class="n">${money(h.total)}</td></tr>`).join('')||'<tr><td colspan="8" class="muted">No GST bills this month.</td></tr>'}</table></div>
+      <div class="card scroll"><h3 style="margin-top:0">B2B bills (buyer has GSTIN)</h3><p class="small muted">B2C bills (no GSTIN): ${r.b2cCount}</p><table class="tbl"><tr><th>Bill no.</th><th>Date</th><th>Buyer</th><th>GSTIN</th><th class="n">Taxable</th><th class="n">Tax</th><th class="n">Total</th></tr>${r.b2b.map(b=>`<tr><td>${esc(b.no)}</td><td>${fmtDate(b.date)}</td><td>${esc(b.name)}</td><td>${esc(b.gstin)}</td><td class="n">${money(b.taxable)}</td><td class="n">${money(b.tax)}</td><td class="n">${money(b.total)}</td></tr>`).join('')||'<tr><td colspan="7" class="muted">None</td></tr>'}</table></div></div>`;
+  }).catch(fail);
+}
+function printReport(){const el=$('repPrint');if(!el)return;$('printArea').innerHTML=`<h2>${esc(S.settings.ShopName)}: report for ${esc(repMonth)}</h2>`+el.innerHTML;$('modalActions').innerHTML='';$('modal').classList.remove('hide');}
+
+/* ---------- settings ---------- */
+function renderSettings(){
+  const s=S.settings;const f=(k,l,extra)=>`<div${extra||''}><label>${l}</label><input name="${k}" value="${esc(s[k])}"></div>`;
+  $('main').innerHTML=`<h2>Settings</h2><div class="card"><div class="form" id="sform">
+    ${f('ShopName','Shop name')}${f('Tagline','Tagline under the name')}${f('Address','Address',' class="wide"')}${f('Phone','Phone')}${f('Email','Email')}
+    <div><label>Shop GSTIN</label><input name="GSTIN" value="${esc(s.GSTIN)}" style="text-transform:uppercase"></div>
+    <div><label>Shop state</label><select name="StateCode">${stateOpts(s.StateCode)}</select></div>
+    ${f('GSTPrefix','GST bill number prefix')}${f('NormalPrefix','Normal bill number prefix')}
+    <div><label>Prices include GST?</label><select name="PricesIncludeGST">${['YES','NO'].map(x=>`<option${(s.PricesIncludeGST||'YES').toUpperCase()===x?' selected':''}>${x}</option>`).join('')}</select></div>
+    ${f('DefaultVehicleHSN','Default vehicle HSN')}${f('DefaultVehicleGSTRate','Default vehicle GST %')}
+    ${f('BankDetails','Bank details printed on bills',' class="wide"')}
+    <div class="wide"><label>Terms printed on bills</label><textarea name="Terms" rows="3">${esc(s.Terms)}</textarea></div>
+  </div><div class="row" style="margin-top:12px"><button class="btn lime" onclick="saveSettings()">Save settings</button></div>
+  <p class="small muted">Bill numbers look like ${esc(s.GSTPrefix||'MEV/GST/')}2026-27/0001 and restart from 0001 every 1 April. GST and normal bills have separate series. All data lives in the Google Sheet; open it any time to see every record.</p></div>`;
+}
+function saveSettings(){
+  const o=formData('sform');o.GSTIN=o.GSTIN.toUpperCase();o.State=stateName(o.StateCode);
+  if(o.GSTIN&&!/^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/.test(o.GSTIN))return toast('That GSTIN does not look right (15 characters, e.g. 19ABCDE1234F1Z5)',true);
+  if(o.GSTIN&&o.StateCode&&o.GSTIN.slice(0,2)!==o.StateCode)return toast('GSTIN starts with '+o.GSTIN.slice(0,2)+' but the state code is '+o.StateCode,true);
+  busy(true,'Saving settings...');call('saveSettings',o).then(()=>{toast('Settings saved');return reload();}).catch(fail);
+}
+
+/* ---------- scanner ---------- */
+let scanCb=null,qr=null;
+function openScanner(cb){
+  scanCb=cb;$('scanManual').value='';$('scanModal').classList.remove('hide');
+  if(!window.Html5Qrcode){$('scanMsg').textContent='The camera scanner could not load. Take a photo of the code or type the number.';return;}
+  $('scanMsg').textContent='Starting camera...';
+  qr=new Html5Qrcode('reader',{experimentalFeatures:{useBarCodeDetectorIfSupported:true},verbose:false});
+  qr.start({facingMode:'environment'},{fps:10,qrbox:(w,h)=>({width:Math.floor(Math.min(w*0.9,380)),height:Math.floor(Math.min(h*0.6,220))})},t=>scanDone(t),()=>{})
+    .then(()=>{$('scanMsg').textContent='Point the camera at the barcode or QR code and hold still.';})
+    .catch(()=>{qr=null;$('scanMsg').textContent='The live camera is not available here. Use "Take a photo of the code" instead, or type the number.';});
+}
+function stopCam(){const q=qr;qr=null;return q?q.stop().then(()=>q.clear()).catch(()=>{}):Promise.resolve();}
+function closeScanner(){scanCb=null;stopCam();$('scanModal').classList.add('hide');$('scanMsg').textContent='';}
+function scanDone(text){
+  text=String(text||'').trim();if(!text||!scanCb)return;
+  const cb=scanCb;closeScanner();
+  try{navigator.vibrate&&navigator.vibrate(80);}catch(e){}
+  cb(text);
+}
+function scanPhoto(inp){
+  const f=inp.files&&inp.files[0];inp.value='';if(!f)return;
+  if(!window.Html5Qrcode)return toast('The scanner could not load. Type the number instead.',true);
+  $('scanMsg').textContent='Reading the photo...';
+  stopCam().then(()=>{const q=new Html5Qrcode('reader',{experimentalFeatures:{useBarCodeDetectorIfSupported:true},verbose:false});
+    return q.scanFile(f,false).then(t=>{q.clear();scanDone(t);});})
+    .catch(()=>{$('scanMsg').textContent='No code found in that photo. Try again closer, in good light, with the code flat and sharp.';});
+}
+function norm(s){return String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');}
+const CODE_FIELDS=[['ChassisNo','Chassis'],['MotorNo','Motor'],['BatteryNo','Battery'],['ChargerNo','Charger']];
+/** Vehicles whose chassis, motor, battery or charger number matches a scanned code. */
+function findStock(code){
+  const c=norm(code);if(!c)return [];
+  let hits=S.stock.filter(v=>CODE_FIELDS.some(([k])=>norm(v[k])===c));
+  if(!hits.length&&c.length>=6)hits=S.stock.filter(v=>CODE_FIELDS.some(([k])=>{const x=norm(v[k]);return x.length>=6&&(c.indexOf(x)>=0||x.indexOf(c)>=0);}));
+  return hits;
+}
+function matchedField(v,code){const c=norm(code);const f=CODE_FIELDS.find(([k])=>norm(v[k])===c)||CODE_FIELDS.find(([k])=>{const x=norm(v[k]);return x&&(c.indexOf(x)>=0||x.indexOf(c)>=0);});return f?f[1]:'';}
+
+let scanMode='find',scanFound=null;
+const AUDIT_KEY='masterev-stockcheck';
+let audit=(()=>{try{return JSON.parse(localStorage.getItem(AUDIT_KEY))||null;}catch(e){return null;}})()||{started:'',scans:[]};
+function saveAudit(){try{localStorage.setItem(AUDIT_KEY,JSON.stringify(audit));}catch(e){}}
+
+function renderScan(){
+  const find=scanMode==='find';
+  $('main').innerHTML=`<div class="row" style="justify-content:space-between;margin-bottom:14px"><h2 style="margin:0">Scanner</h2>
+    <div class="seg"><button class="${find?'on':''}" onclick="scanMode='find';renderScan()">FIND VEHICLE</button><button class="${!find?'on':''}" onclick="scanMode='audit';renderScan()">STOCK CHECK</button></div></div>
+  <div class="card"><p class="small muted" style="margin-top:0">${find?'Scan the chassis, motor, battery or charger number to see that scooter.':'Walk the showroom and scan every scooter. The list below shows what is missing and what is not in the system.'}</p>
+    <div class="row" style="flex-wrap:nowrap"><input id="scanIn" placeholder="Scan with a barcode gun, or type a number and press Enter" style="flex:1 1 auto;min-width:0" onkeydown="if(event.key==='Enter'){handleScan(this.value);}">
+    <button class="btn lime" onclick="openScanner(handleScan)">Scan with camera</button></div></div>
+  <div id="scanOut"></div>`;
+  find?renderFind():renderAudit();
+  const i=$('scanIn');if(i&&window.matchMedia('(pointer:fine)').matches)i.focus();
+}
+function handleScan(code){
+  code=String(code||'').trim();if($('scanIn'))$('scanIn').value='';if(!code)return;
+  if(scanMode==='find'){scanFound={code,hits:findStock(code)};renderFind();}else auditScan(code);
+  const i=$('scanIn');if(i&&window.matchMedia('(pointer:fine)').matches)i.focus();
+}
+function renderFind(){
+  const out=$('scanOut');if(!out)return;
+  if(!scanFound){out.innerHTML='';return;}
+  const {code,hits}=scanFound;
+  if(!hits.length){out.innerHTML=`<div class="card" style="border-color:var(--amber)"><b>No vehicle found for ${esc(code)}</b><p class="small muted">It is not in stock and was never sold from this system.</p>
+    <button class="btn lime" onclick="vehPrefill={ChassisNo:'${esc(code.toUpperCase().replace(/[^A-Z0-9\-\/]/g,''))}'};go('vehicles')">Add a new vehicle with this chassis no.</button></div>`;return;}
+  out.innerHTML=hits.map(v=>{const sold=v.Status!=='In Stock';return `<div class="card" style="border:2px solid ${sold?'#999':'var(--green)'}">
+    <div class="row" style="justify-content:space-between;align-items:center"><div style="font-size:18px;font-weight:800">${esc(v.ModelName)}</div>${sold?'<span class="pill p-sold">Sold</span>':'<span class="pill p-in">In stock</span>'}</div>
+    <div class="small muted">Matched on ${esc(matchedField(v,code))} number ${esc(code)}</div>
+    <table class="tbl" style="margin-top:8px"><tr><td>Colour</td><td>${esc(v.Color)||'-'}</td></tr><tr><td>Chassis</td><td><b>${esc(v.ChassisNo)}</b></td></tr><tr><td>Motor</td><td>${esc(v.MotorNo)||'-'}</td></tr><tr><td>Battery</td><td>${esc(v.BatteryNo)||'-'}</td></tr><tr><td>Charger</td><td>${esc(v.ChargerNo)||'-'}</td></tr>
+    <tr><td>Purchased</td><td>${fmtDate(v.PurchaseDate)} ${v.Supplier?'from '+esc(v.Supplier):''}</td></tr>${sold?`<tr><td>Sold</td><td>${fmtDate(v.SoldDate)}, bill <a href="#" onclick="openInvoice('${esc(v.SoldInvoiceNo)}');return false">${esc(v.SoldInvoiceNo)}</a></td></tr>`:''}</table>
+    ${sold?'':`<div class="row" style="margin-top:10px"><button class="btn lime" onclick="billFromScan('${esc(v.StockId)}','GST')">Make GST bill</button><button class="btn" onclick="billFromScan('${esc(v.StockId)}','NORMAL')">Make normal bill</button></div>`}</div>`;}).join('');
+}
+function billFromScan(id,type){bill=blankBill(type);bill.items.push(vehicleItem(id));go('bill');}
+
+function auditScan(code){
+  const c=norm(code);
+  if(audit.scans.some(s=>norm(s.code)===c))return toast(code+' is already counted',true);
+  const hits=findStock(code);
+  const v=hits.find(h=>h.Status==='In Stock')||hits[0];
+  if(v&&audit.scans.some(s=>s.stockId===v.StockId))return toast('This scooter is already counted ('+v.ChassisNo+')',true);
+  if(!audit.started)audit.started=new Date().toLocaleString('en-IN');
+  audit.scans.push({code,stockId:v?v.StockId:'',time:new Date().toLocaleTimeString('en-IN')});
+  saveAudit();
+  toast(v?'Counted: '+v.ModelName:'Not in system: '+code,!v);
+  renderAudit();
+}
+function renderAudit(){
+  const out=$('scanOut');if(!out)return;
+  const inStock=S.stock.filter(v=>v.Status==='In Stock');
+  const seen={};audit.scans.forEach(s=>{if(s.stockId)seen[s.stockId]=s;});
+  const found=inStock.filter(v=>seen[v.StockId]);
+  const missing=inStock.filter(v=>!seen[v.StockId]);
+  const soldButHere=S.stock.filter(v=>v.Status!=='In Stock'&&seen[v.StockId]);
+  const unknown=audit.scans.filter(s=>!s.stockId);
+  const vrow=v=>`<tr><td>${esc(v.ModelName)}</td><td>${esc(v.Color)}</td><td><b>${esc(v.ChassisNo)}</b></td></tr>`;
+  out.innerHTML=`<div class="grid">
+    <div class="stat"><div class="k">In stock (system)</div><div class="v">${inStock.length}</div></div>
+    <div class="stat hl"><div class="k">Found</div><div class="v">${found.length}</div></div>
+    <div class="stat"><div class="k">Missing</div><div class="v" style="color:${missing.length?'var(--red)':'var(--green)'}">${missing.length}</div></div>
+    <div class="stat"><div class="k">Not in system</div><div class="v" style="color:${unknown.length?'var(--amber)':'inherit'}">${unknown.length}</div></div></div>
+  <p class="small muted">${audit.started?'Count started '+esc(audit.started)+'. Saved on this device, so you can close the app and carry on.':'Nothing scanned yet.'}</p>
+  ${missing.length?`<div class="card scroll"><h3 style="margin-top:0;color:var(--red)">Missing: in the system but not scanned (${missing.length})</h3><table class="tbl"><tr><th>Model</th><th>Colour</th><th>Chassis</th></tr>${missing.map(vrow).join('')}</table></div>`:(inStock.length?'<div class="card" style="border-color:var(--green)"><b style="color:var(--green)">Every scooter in stock has been found.</b></div>':'')}
+  ${unknown.length?`<div class="card scroll"><h3 style="margin-top:0;color:var(--amber)">Scanned but not in the system (${unknown.length})</h3><table class="tbl">${unknown.map(s=>`<tr><td><b>${esc(s.code)}</b></td><td class="small muted">${esc(s.time)}</td><td><button class="btn sm" onclick="vehPrefill={ChassisNo:'${esc(norm(s.code))}'};go('vehicles')">Add to stock</button></td></tr>`).join('')}</table></div>`:''}
+  ${soldButHere.length?`<div class="card scroll"><h3 style="margin-top:0;color:var(--amber)">Marked Sold but found in the showroom (${soldButHere.length})</h3><table class="tbl">${soldButHere.map(v=>`<tr><td>${esc(v.ModelName)}</td><td><b>${esc(v.ChassisNo)}</b></td><td>bill ${esc(v.SoldInvoiceNo)}</td></tr>`).join('')}</table></div>`:''}
+  ${found.length?`<div class="card scroll"><h3 style="margin-top:0">Found (${found.length})</h3><table class="tbl">${found.map(vrow).join('')}</table></div>`:''}
+  <div class="row"><button class="btn ghost" onclick="printAudit()">Print count</button><button class="btn red" onclick="if(window.confirm('Clear this count and start again?')){audit={started:'',scans:[]};saveAudit();renderAudit();}">Start a new count</button></div>`;
+}
+function printAudit(){$('printArea').innerHTML=`<h2>${esc(S.settings.ShopName)}: stock check ${esc(audit.started)}</h2>`+$('scanOut').innerHTML.replace(/<div class="row">[\s\S]*$/,'');$('modalActions').innerHTML='';$('modal').classList.remove('hide');}
+
+/* ---------- start ---------- */
+renderNav();
+reload();
+</script>
+</body>
+</html>
