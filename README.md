@@ -30,6 +30,20 @@ the sheet and all past records stay there.
 
 After a code change: **Deploy > Manage deployments > Edit > Version: New version**.
 
+## Switch on the AI scooter scan (optional)
+Scanner > **Scan scooter** identifies a scooter from a photo (model and colour)
+and reads the chassis number from a photo of the plate. It uses Claude, an AI
+by Anthropic, and needs an API key:
+1. Create a key at console.anthropic.com (add a payment method there).
+2. In Apps Script, open **Project Settings > Script properties > Add script property**.
+   Name: `ANTHROPIC_API_KEY`, value: the key. Save.
+3. The first scan asks for one more permission (connecting to an external service). Allow it.
+
+The key stays in the script's settings, never in the code or on GitHub.
+Cost is roughly ₹3 to ₹5 per scooter scanned. The AI only suggests: staff pick the
+battery variant (a photo cannot show it), check the chassis number against the
+plate, and tap **Mark as stock**.
+
 ## What it does
 - **Models**: price list (HSN 8711, GST 5% by default for electric scooters).
 - **Vehicles**: each scooter by chassis, motor, battery and charger number.

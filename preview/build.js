@@ -5,7 +5,7 @@ const root = path.join(__dirname, '..');
 const read = f => fs.readFileSync(path.join(root, f), 'utf8');
 const server = read('Code.gs') + '\n' + read('Seed.gs');
 const fns = ['getBootstrap', 'saveSettings', 'addModel', 'updateModel', 'addVehicle', 'addAccessory', 'adjustAccessory',
-  'findCustomer', 'createInvoice', 'getInvoice', 'listInvoices', 'recordPayment', 'cancelInvoice', 'getMonthReport'];
+  'findCustomer', 'identifyScooter', 'createInvoice', 'getInvoice', 'listInvoices', 'recordPayment', 'cancelInvoice', 'getMonthReport'];
 const inject = `<script>
 ${read('preview/mock.js')}
 var SERVER = (function () {

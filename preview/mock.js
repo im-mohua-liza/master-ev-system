@@ -55,3 +55,6 @@ var Utilities = {
       .replace('HH', p(d.getHours())).replace('mm', p(d.getMinutes()));
   }
 };
+// The demo has no AI key, so the AI scooter scan explains that instead of faking a result.
+var PropertiesService = { getScriptProperties: function () { return { getProperty: function () { return null; } }; } };
+var UrlFetchApp = { fetch: function () { throw new Error('AI scan is not available in the demo.'); } };

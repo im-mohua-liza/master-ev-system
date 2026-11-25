@@ -560,3 +560,80 @@ function getMonthReport(month) {
     })()
   };
 }
+
+/* ------------------------------------------------------------------ */
+/* AI scooter scan: photo of the scooter (+ optional photo of the       */
+/* chassis plate) -> model, colour and numbers, for adding to stock.   */
+/* Needs an Anthropic API key in Project Settings > Script properties  */
+/* under the name ANTHROPIC_API_KEY. The key never goes in the code.   */
+/* ------------------------------------------------------------------ */
+
+const AI_MODEL = 'claude-opus-5-5';
+
+function identifyScooter(photos) {
+  const key = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!key) throw new Error('AI scan is not switched on yet. In Apps Script open Project Settings > Script properties and add ANTHROPIC_API_KEY (see README).');
+  photos = (photos || []).filter(p => p && p.data).slice(0, 2);
+  if (!photos.length) throw new Error('Take a photo of the scooter first.');
+
+  const models = readTable_('Models').filter(m => String(m.Active).toUpperCase() !== 'NO');
+  const names = [];
+  models.forEach(m => { const n = str_(m.Model); if (n && names.indexOf(n) < 0) names.push(n); });
+  if (!names.length) throw new Error('Add models first (Models tab, or the sheet menu Master EV > Load Zelio models).');
+  const choices = names.concat(['UNKNOWN']);
+
+  const content = [];
+  photos.forEach(p => {
+    content.push({ type: 'image', source: { type: 'base64', media_type: p.mediaType || 'image/jpeg', data: String(p.data).replace(/^data:[^,]+,/, '') } });
+  });
+  content.push({ type: 'text', text:
+    'You are helping an electric scooter showroom add one scooter to its stock list.\n' +
+    'Photo 1 shows the scooter.' + (photos.length > 1 ? ' Photo 2 shows a number plate or sticker on the same scooter.' : '') + '\n\n' +
+    'Pick the model from this list only (these are the models the showroom sells): ' + names.join(', ') + '.\n' +
+    'Several of them look alike (for example the Gracy, Eeva, Legender and X Men families). Give your best match, ' +
+    'say how sure you are, and list close look-alikes as alternatives. If the photo does not show a scooter from this list, answer UNKNOWN.\n' +
+    'Give the main body colour in plain words (for example White, Charcoal Black, Crimson Red).\n' +
+    'Copy the chassis/VIN, motor, battery and charger numbers exactly as printed, but only when you can read every character clearly. ' +
+    'If a number is not visible or any character is unclear, return an empty string for it. Never guess characters.\n' +
+    'In notes, say in one short sentence anything the staff should check by eye.' });
+
+  const schema = {
+    type: 'object', additionalProperties: false,
+    required: ['model', 'confidence', 'alternatives', 'color', 'chassisNo', 'motorNo', 'batteryNo', 'chargerNo', 'notes'],
+    properties: {
+      model: { type: 'string', enum: choices },
+      confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+      alternatives: { type: 'array', items: { type: 'string', enum: choices } },
+      color: { type: 'string' }, chassisNo: { type: 'string' }, motorNo: { type: 'string' },
+      batteryNo: { type: 'string' }, chargerNo: { type: 'string' }, notes: { type: 'string' }
+    }
+  };
+
+  const res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    headers: { 'x-api-key': key, 'anthropic-version': '2026-10-21', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
+    payload: JSON.stringify({
+      model: AI_MODEL, max_tokens: 16000, fallbacks: 'default',
+      output_config: { effort: 'medium', format: { type: 'json_schema', schema: schema } },
+      messages: [{ role: 'user', content: content }]
+    })
+  });
+  const code = res.getResponseCode();
+  let body = {};
+  try { body = JSON.parse(res.getContentText()); } catch (e) {}
+  if (code === 401) throw new Error('The AI key was rejected. Check ANTHROPIC_API_KEY in Script properties.');
+  if (code === 429 || code >= 500) throw new Error('The AI service is busy. Please try again in a minute.');
+  if (code !== 200) throw new Error('AI scan failed (' + code + '): ' + ((body.error && body.error.message) || 'unknown error'));
+  if (body.stop_reason === 'refusal') throw new Error('The AI could not process this photo. Please try another photo.');
+  const textBlock = (body.content || []).filter(b => b.type === 'text').pop();
+  let out;
+  try { out = JSON.parse(textBlock.text); } catch (e) { throw new Error('The AI reply could not be read. Please try again.'); }
+
+  const pick = n => models.filter(m => str_(m.Model) === n).map(m => ({ ModelId: m.ModelId, name: modelName_(m), SalePrice: num_(m.SalePrice) }));
+  out.candidates = out.model === 'UNKNOWN' ? [] : pick(out.model);
+  out.altCandidates = [];
+  (out.alternatives || []).forEach(n => { if (n !== out.model && n !== 'UNKNOWN') out.altCandidates = out.altCandidates.concat(pick(n)); });
+  ['chassisNo', 'motorNo', 'batteryNo', 'chargerNo'].forEach(k => { out[k] = str_(out[k]).toUpperCase().replace(/\s+/g, ''); });
+  out.duplicate = !!out.chassisNo && readTable_('Stock').some(s => str_(s.ChassisNo).toUpperCase() === out.chassisNo);
+  return out;
+}
