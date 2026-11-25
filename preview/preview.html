@@ -1455,7 +1455,52 @@ function runAi(){
   const photos=[ai.scooter,ai.plate].filter(Boolean).map(d=>({data:d,mediaType:'image/jpeg'}));
   busy(true,'AI is looking at the photos...');
   call('identifyScooter',photos).then(r=>{busy(false);ai.result=r;renderAi();
-    if(r.model==='UNKNOWN')toast('The AI could not match this to a model. Pick it yourself below.',true);}).catch(fail);
+    if(r.model==='UNKNOWN')toast('The AI could not match this to a model. Pick it yourself below.',true);})
+    .catch(e=>{const m=(e&&e.message)||String(e);
+      if(/not switched on|not available in the demo/i.test(m))return runFreeScan();
+      fail(e);});
+}
+
+/* Free scan (no AI key): the chassis number is read on the phone with Tesseract,
+   and staff tap the model's picture. Used automatically when AI scan is off. */
+const IMG_BASE='https://im-mohua-liza.github.io/master-ev-system/img/';
+const MODEL_IMG={'Gracy':'gracy','Mystery':'mystery','X Men 2.0':'xmen2','LOGIX':'logix','Logix Loader':'logix-loader','X Men+':'xmen-plus',
+  'Legender+ Premium':'legender-plus-premium','Legender+':'legender-plus','Legender':'legender','Gracy Pro':'gracy-pro','Gracy+':'gracy-plus',
+  'Gracyi':'gracyi','Little Gracy':'little-gracy','Eeva Eco ZX':'eeva-eco-zx','Eeva Eco LX':'eeva-eco-lx','Eeva Eco':'eeva-eco',
+  'EEVA ZX+':'eeva-zx-plus','EEVA (N)':'eeva-n','EEVA ZX':'eeva-zx'};
+function loadOcr(){
+  if(window.Tesseract)return Promise.resolve();
+  return new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    s.onload=()=>res();s.onerror=()=>rej(new Error('The number reader could not load.'));document.head.appendChild(s);});
+}
+/** Best chassis-like token from OCR text: long, letters and digits mixed. */
+function pickChassis(text){
+  const toks=String(text||'').toUpperCase().replace(/[^A-Z0-9\s]/g,' ').split(/\s+/).filter(t=>t.length>=8&&/\d/.test(t)&&/[A-Z]/.test(t));
+  toks.sort((a,b)=>Math.abs(17-a.length)-Math.abs(17-b.length));
+  return toks[0]||'';
+}
+function freeResult(chassis){
+  const dup=!!chassis&&S.stock.some(s=>norm(s.ChassisNo)===norm(chassis));
+  return {free:true,model:'UNKNOWN',confidence:'',alternatives:[],color:'',chassisNo:chassis,motorNo:'',batteryNo:'',chargerNo:'',notes:'',candidates:[],altCandidates:[],duplicate:dup};
+}
+function runFreeScan(){
+  const img=ai.plate||ai.scooter;
+  busy(true,'Reading the chassis number on this phone...');
+  loadOcr().then(()=>Tesseract.recognize(img,'eng')).then(o=>{busy(false);ai.result=freeResult(pickChassis(o.data&&o.data.text));renderAi();})
+    .catch(()=>{busy(false);ai.result=freeResult('');renderAi();toast('Could not read the number. Type it in.',true);});
+}
+function pickModel(name){
+  const r=ai.result;if(!r)return;r.model=name;
+  r.candidates=S.models.filter(m=>m.Model===name&&String(m.Active).toUpperCase()!=='NO').map(m=>({ModelId:m.ModelId,name:modelName(m),SalePrice:m.SalePrice}));
+  renderAi();
+  const sel=document.querySelector('#aiform select[name=ModelId]');if(sel&&r.candidates.length===1)sel.value=r.candidates[0].ModelId;
+  const f=$('aiform');if(f)f.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function modelGrid(r){
+  const names=[];S.models.forEach(m=>{if(String(m.Active).toUpperCase()!=='NO'&&names.indexOf(m.Model)<0)names.push(m.Model);});
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin:10px 0">${names.map(n=>{const k=MODEL_IMG[n];const on=r.model===n;
+    return `<button onclick="pickModel('${esc(n).replace(/'/g,'&#39;')}')" style="border:${on?'3px solid var(--ink)':'1px solid var(--line)'};background:${on?'var(--lime)':'#fff'};border-radius:8px;padding:6px;cursor:pointer;font:inherit;font-size:12px;font-weight:700">
+      ${k?`<img src="${IMG_BASE}${k}.webp" alt="" loading="lazy" style="width:100%;height:80px;object-fit:contain">`:'<div style="height:80px"></div>'}<div>${esc(n)}</div></button>`;}).join('')}</div>`;
 }
 function aiResultHtml(r){
   const opts=(list,label)=>list.length?`<optgroup label="${esc(label)}">${list.map(c=>`<option value="${esc(c.ModelId)}">${esc(c.name)} | ${money0(c.SalePrice)}</option>`).join('')}</optgroup>`:'';
@@ -1464,15 +1509,19 @@ function aiResultHtml(r){
   const conf={high:['var(--green)','Sure'],medium:['var(--amber)','Fairly sure'],low:['var(--red)','Not sure']}[r.confidence]||['var(--mute)',''];
   const alts=[...new Set((r.alternatives||[]).filter(a=>a!==r.model&&a!=='UNKNOWN'))];
   const f=(k,l,v)=>`<div><label>${l}</label><input name="${k}" value="${esc(v||'')}" style="text-transform:uppercase"></div>`;
-  return `<div class="card" style="border:2px solid ${conf[0]}">
-    <div class="row" style="justify-content:space-between;align-items:center"><div style="font-size:18px;font-weight:800">${r.model==='UNKNOWN'?'Model not recognised':'Looks like: Zelio '+esc(r.model)}</div>
-      ${r.model==='UNKNOWN'?'':`<span class="pill" style="background:${conf[0]};color:#fff">${conf[1]}</span>`}</div>
+  const head=r.free
+    ?`<div style="font-size:18px;font-weight:800">${r.model==='UNKNOWN'?'Tap the scooter\'s picture':'Selected: Zelio '+esc(r.model)}</div>
+      <div class="small muted">Free scan: the chassis number was read on this phone. AI model recognition switches on when an AI key is added.</div>${modelGrid(r)}`
+    :`<div class="row" style="justify-content:space-between;align-items:center"><div style="font-size:18px;font-weight:800">${r.model==='UNKNOWN'?'Model not recognised':'Looks like: Zelio '+esc(r.model)}</div>
+      ${r.model==='UNKNOWN'?'':`<span class="pill" style="background:${conf[0]};color:#fff">${conf[1]}</span>`}</div>`;
+  return `<div class="card" style="border:2px solid ${r.free?'var(--ink)':conf[0]}">
+    ${head}
     ${alts.length?`<div class="small muted">Could also be: ${esc(alts.join(', '))}</div>`:''}
     ${r.notes?`<div class="small" style="margin-top:4px">${esc(r.notes)}</div>`:''}
     ${r.duplicate?`<div class="card" style="border-color:var(--red);margin:10px 0 0"><b style="color:var(--red)">Chassis ${esc(r.chassisNo)} is already in the system.</b> <a href="#" onclick="scanMode='find';scanFound={code:'${esc(r.chassisNo)}',hits:findStock('${esc(r.chassisNo)}')};renderScan();return false">See it</a></div>`:''}
     <h3>Check and confirm</h3>
     <div class="form" id="aiform">
-      <div class="wide"><label>Model and battery variant * (the battery cannot be seen in a photo, so pick it)</label><select name="ModelId"><option value="">Select</option>${opts(r.candidates,'AI match')}${opts(r.altCandidates,'Look-alikes')}${opts(rest,'All other models')}</select></div>
+      <div class="wide"><label>Model and battery variant * (the battery cannot be seen in a photo, so pick it)</label><select name="ModelId"><option value="">Select</option>${opts(r.candidates,r.free?'Selected model':'AI match')}${opts(r.altCandidates,'Look-alikes')}${opts(rest,'All other models')}</select></div>
       <div><label>Colour</label><input name="Color" value="${esc(r.color)}"></div>
       ${f('ChassisNo','Chassis / VIN no. *',r.chassisNo)}${f('MotorNo','Motor no.',r.motorNo)}${f('BatteryNo','Battery no.',r.batteryNo)}${f('ChargerNo','Charger no.',r.chargerNo)}
       <div><label>Supplier</label><input name="Supplier"></div>
