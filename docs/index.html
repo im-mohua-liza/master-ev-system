@@ -116,6 +116,7 @@ function mockSheet(name) {
         for (var k = 0; k < rows.length; k++) if (!rows[k]) rows[k] = [];
         mockSave(); return rg;
       },
+      setValue: function (v) { return rg.setValues([[v]]); },
       setFontWeight: function () { return rg; }, setBackground: function () { return rg; },
       setFontColor: function () { return rg; }, setNumberFormat: function () { return rg; }
     };
@@ -126,6 +127,7 @@ function mockSheet(name) {
     getDataRange: function () { var w = rows.reduce(function (a, r) { return Math.max(a, r.length); }, 0); return range(1, 1, rows.length, w); },
     appendRow: function (row) { rows.push(row.slice()); mockSave(); },
     getLastRow: function () { return rows.length; },
+    getLastColumn: function () { return rows.reduce(function (a, r) { return Math.max(a, r.length); }, 0); },
     getMaxRows: function () { return 1000; },
     setFrozenRows: function () {}
   };
@@ -178,7 +180,7 @@ const SHEETS = {
                  'StateCode', 'Taxable', 'CGST', 'SGST', 'IGST', 'RoundOff', 'Total', 'PaymentMode', 'AmountPaid',
                  'Balance', 'Status', 'Notes', 'CreatedAt'],
   InvoiceItems: ['InvoiceNo', 'Line', 'ItemType', 'RefId', 'Description', 'ChassisNo', 'MotorNo', 'BatteryNo', 'HSN',
-                 'Qty', 'UnitPrice', 'GSTRate', 'Taxable', 'CGST', 'SGST', 'IGST', 'LineTotal']
+                 'Qty', 'UnitPrice', 'GSTRate', 'Taxable', 'CGST', 'SGST', 'IGST', 'LineTotal', 'ControllerNo']
 };
 
 // Columns kept as plain text so Sheets never turns them into numbers or dates.
@@ -187,7 +189,7 @@ const TEXT_COLS = {
   Stock: ['StockId', 'ModelId', 'ChassisNo', 'MotorNo', 'BatteryNo', 'ChargerNo', 'PurchaseInvoiceNo', 'SoldInvoiceNo'],
   Customers: ['Phone', 'GSTIN', 'StateCode', 'LastInvoiceNo'],
   Invoices: ['InvoiceNo', 'Phone', 'CustomerGSTIN', 'StateCode'],
-  InvoiceItems: ['InvoiceNo', 'RefId', 'ChassisNo', 'MotorNo', 'BatteryNo', 'HSN'],
+  InvoiceItems: ['InvoiceNo', 'RefId', 'ChassisNo', 'MotorNo', 'BatteryNo', 'HSN', 'ControllerNo'],
   Models: ['ModelId', 'HSN'],
   Accessories: ['ItemId', 'HSN']
 };
@@ -258,6 +260,16 @@ function ensureSetup_() {
       sh.setFrozenRows(1);
       (TEXT_COLS[name] || []).forEach(col => {
         sh.getRange(2, head.indexOf(col) + 1, sh.getMaxRows() - 1, 1).setNumberFormat('@');
+      });
+    } else {
+      // A sheet made by an older version: add any new columns at the end of the header.
+      const have = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(String);
+      head.forEach((h, i) => {
+        if (have.indexOf(h) < 0 && i >= have.length) {
+          sh.getRange(1, i + 1).setValue(h).setFontWeight('bold').setBackground('#0b0b0b').setFontColor('#c6ff00');
+          if ((TEXT_COLS[name] || []).indexOf(h) >= 0) sh.getRange(2, i + 1, sh.getMaxRows() - 1, 1).setNumberFormat('@');
+          have[i] = h;
+        }
       });
     }
   });
@@ -539,7 +551,10 @@ function createInvoice(p) {
     const items = p.items.map(it => {
       const o = {
         itemType: it.itemType, refId: str_(it.refId), description: str_(it.description), hsn: str_(it.hsn),
-        qty: num_(it.qty), unitPrice: num_(it.unitPrice), gstRate: num_(it.gstRate), chassisNo: '', motorNo: '', batteryNo: ''
+        qty: num_(it.qty), unitPrice: num_(it.unitPrice), gstRate: num_(it.gstRate),
+        // Numbers the shop owner typed on the bill for this scooter (printed on the bill).
+        chassisNo: str_(it.chassisNo).toUpperCase(), motorNo: str_(it.motorNo).toUpperCase(),
+        controllerNo: str_(it.controllerNo).toUpperCase(), batteryNo: str_(it.batteryNo).toUpperCase()
       };
       if (!o.description) throw new Error('Every line needs a description.');
       if (o.qty <= 0) throw new Error('Quantity must be more than zero for ' + o.description + '.');
@@ -547,7 +562,8 @@ function createInvoice(p) {
         const v = stock.find(x => x.StockId === o.refId);
         if (!v) throw new Error('Vehicle not found in stock.');
         if (v.Status !== 'In Stock') throw new Error('Vehicle ' + v.ChassisNo + ' is already sold.');
-        o.qty = 1; o.chassisNo = v.ChassisNo; o.motorNo = v.MotorNo; o.batteryNo = v.BatteryNo; o._row = v._row;
+        o.qty = 1; o._row = v._row;
+        o.chassisNo = o.chassisNo || str_(v.ChassisNo); o.motorNo = o.motorNo || str_(v.MotorNo); o.batteryNo = o.batteryNo || str_(v.BatteryNo);
       }
       if (o.itemType === 'ACCESSORY') {
         const a = acc.find(x => x.ItemId === o.refId);
@@ -586,7 +602,8 @@ function createInvoice(p) {
     appendMany_('InvoiceItems', t.lines.map((l, i) => ({
       InvoiceNo: invNo, Line: i + 1, ItemType: l.itemType, RefId: l.refId, Description: l.description,
       ChassisNo: l.chassisNo, MotorNo: l.motorNo, BatteryNo: l.batteryNo, HSN: l.hsn, Qty: l.qty, UnitPrice: l.unitPrice,
-      GSTRate: l.gstRate, Taxable: l.taxable, CGST: l.cgst, SGST: l.sgst, IGST: l.igst, LineTotal: l.lineTotal
+      GSTRate: l.gstRate, Taxable: l.taxable, CGST: l.cgst, SGST: l.sgst, IGST: l.igst, LineTotal: l.lineTotal,
+      ControllerNo: l.controllerNo
     })));
 
     items.forEach(o => {
@@ -629,7 +646,7 @@ function listInvoices(f) {
   if (q) {
     const chassisHits = {};
     readTable_('InvoiceItems').forEach(it => {
-      if ((str_(it.ChassisNo) + ' ' + str_(it.MotorNo) + ' ' + str_(it.BatteryNo)).toLowerCase().indexOf(q) >= 0) chassisHits[it.InvoiceNo] = 1;
+      if ((str_(it.ChassisNo) + ' ' + str_(it.MotorNo) + ' ' + str_(it.ControllerNo) + ' ' + str_(it.BatteryNo)).toLowerCase().indexOf(q) >= 0) chassisHits[it.InvoiceNo] = 1;
     });
     rows = rows.filter(r => chassisHits[r.InvoiceNo] ||
       [r.InvoiceNo, r.CustomerName, r.Phone, r.CustomerGSTIN].join(' ').toLowerCase().indexOf(q) >= 0);
@@ -1076,6 +1093,7 @@ function renderBill(){
       <button class="btn ghost" onclick="openScanner(scanToBill)">Scan vehicle</button>
       <div style="flex:1 1 200px"><label>Add an accessory</label><select id="addAcc"><option value="">${acc.length?'Pick item':'No accessories in stock'}</option>${acc.map(a=>`<option value="${esc(a.ItemId)}">${esc(a.Name)} (${num(a.Qty)} left)</option>`).join('')}</select></div>
       <button class="btn" onclick="addAccLine()">Add item</button>
+      <button class="btn ghost" onclick="addScooterLine()">+ Scooter (type numbers)</button>
       <button class="btn ghost" onclick="addOtherLine()">+ Other line</button>
     </div>
     <div class="scroll"><table class="tbl" id="lines"></table></div>
@@ -1124,6 +1142,14 @@ function addAccLine(){
   bill.items.push({itemType:'ACCESSORY',refId:id,description:a.Name,hsn:a.HSN,qty:1,unitPrice:num(a.SalePrice),gstRate:num(a.GSTRate)});
   renderLines();
 }
+/** A scooter line not picked from stock: the shop owner types its numbers. */
+function addScooterLine(){bill.items.push({itemType:'OTHER',scooter:true,refId:'',description:'',chassisNo:'',motorNo:'',controllerNo:'',batteryNo:'',
+  hsn:S.settings.DefaultVehicleHSN||'8711',qty:1,unitPrice:0,gstRate:num(S.settings.DefaultVehicleGSTRate||5)});renderLines();}
+const NO_FIELDS=[['chassisNo','Chassis no.'],['motorNo','Motor no.'],['controllerNo','Controller no.'],['batteryNo','Battery no.']];
+function numberInputs(it,i){
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px;margin-top:6px">${NO_FIELDS.map(([k,l])=>
+    `<div><label style="margin:0 0 2px">${l}</label><input value="${esc(it[k]||'')}" placeholder="Type ${l.toLowerCase()}" style="text-transform:uppercase" oninput="setLine(${i},'${k}',this.value.trim().toUpperCase())"></div>`).join('')}</div>`;
+}
 function addOtherLine(){bill.items.push({itemType:'OTHER',refId:'',description:'',hsn:'',qty:1,unitPrice:0,gstRate:0});renderLines();}
 function removeLine(i){bill.items.splice(i,1);renderBill();}
 function setLine(i,k,v){bill.items[i][k]=v;renderTotals();}
@@ -1132,7 +1158,7 @@ function renderLines(){
   if(!bill.items.length){$('lines').innerHTML='<tr><td class="muted">No items yet. Add a vehicle, an accessory or an other line (for example registration or insurance charges).</td></tr>';renderTotals();return;}
   $('lines').innerHTML=`<tr><th>#</th><th>Description</th>${g?'<th>HSN</th>':''}<th class="n">Qty</th><th class="n">Price (${g&&bill.pricesIncludeGST?'incl. GST':g?'excl. GST':'each'})</th>${g?'<th class="n">GST %</th><th class="n">Taxable</th><th class="n">GST</th>':''}<th class="n">Amount</th><th></th></tr>`+
   bill.items.map((it,i)=>`<tr><td>${i+1}</td>
-    <td style="min-width:200px"><input value="${esc(it.description)}" oninput="setLine(${i},'description',this.value)">${it.itemType==='VEHICLE'?`<div class="small muted">Chassis ${esc(it.chassisNo)} | Motor ${esc(it.motorNo)} | Battery ${esc(it.batteryNo)}</div>`:''}</td>
+    <td style="min-width:200px"><input value="${esc(it.description)}" oninput="setLine(${i},'description',this.value)">${it.itemType==='VEHICLE'||it.scooter?numberInputs(it,i):''}</td>
     ${g?`<td style="width:90px"><input value="${esc(it.hsn)}" oninput="setLine(${i},'hsn',this.value)"></td>`:''}
     <td style="width:70px"><input type="number" min="1" value="${esc(it.qty)}" ${it.itemType==='VEHICLE'?'disabled':''} oninput="setLine(${i},'qty',this.value)"></td>
     <td style="width:130px"><input type="number" min="0" step="0.01" value="${esc(it.unitPrice)}" oninput="setLine(${i},'unitPrice',this.value)"></td>
@@ -1176,7 +1202,8 @@ function invoiceHtml(r){
     <div style="text-align:right"><div><b>${g?'Invoice':'Bill'} No:</b> ${esc(inv.InvoiceNo)}</div><div><b>Date:</b> ${fmtDate(inv.Date)}</div>${g?`<div><b>Place of supply:</b> ${esc(inv.PlaceOfSupply)} (${esc(inv.StateCode)})</div><div>Reverse charge: No</div>`:''}</div></div>`;
   const parties=`<div class="parties"><div><b>Bill to</b><div style="font-size:14px;font-weight:700">${esc(inv.CustomerName)}</div><div>${esc(inv.Address)}</div>${inv.Phone?`<div>Ph: ${esc(inv.Phone)}</div>`:''}${g&&inv.CustomerGSTIN?`<div><b>GSTIN: ${esc(inv.CustomerGSTIN)}</b></div>`:''}</div>
     <div><b>Payment</b><div>Mode: ${esc(inv.PaymentMode)}</div><div>Received: ${money(inv.AmountPaid)}</div>${num(inv.Balance)>0?`<div><b>Balance due: ${money(inv.Balance)}</b></div>`:''}${inv.Notes?`<div class="sub">${esc(inv.Notes)}</div>`:''}</div></div>`;
-  const desc=it=>`<b>${esc(it.Description)}</b>${it.ChassisNo?`<div class="sub">Chassis No: ${esc(it.ChassisNo)}<br>Motor No: ${esc(it.MotorNo)}${it.BatteryNo?'<br>Battery No: '+esc(it.BatteryNo):''}</div>`:''}`;
+  const desc=it=>{const nos=[['Chassis No',it.ChassisNo],['Motor No',it.MotorNo],['Controller No',it.ControllerNo],['Battery No',it.BatteryNo]].filter(x=>x[1]);
+    return `<b>${esc(it.Description)}</b>${nos.length?`<div class="sub">${nos.map(x=>esc(x[0])+': <b>'+esc(x[1])+'</b>').join('<br>')}</div>`:''}`;};
   let table;
   if(g){
     table=`<table><tr><th>#</th><th>Description</th><th>HSN</th><th class="n">Qty</th><th class="n">Rate</th><th class="n">Taxable</th><th class="n">GST %</th>${inter?'<th class="n">IGST</th>':'<th class="n">CGST</th><th class="n">SGST</th>'}<th class="n">Total</th></tr>`+

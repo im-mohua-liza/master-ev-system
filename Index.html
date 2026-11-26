@@ -228,6 +228,7 @@ function renderBill(){
       <button class="btn ghost" onclick="openScanner(scanToBill)">Scan vehicle</button>
       <div style="flex:1 1 200px"><label>Add an accessory</label><select id="addAcc"><option value="">${acc.length?'Pick item':'No accessories in stock'}</option>${acc.map(a=>`<option value="${esc(a.ItemId)}">${esc(a.Name)} (${num(a.Qty)} left)</option>`).join('')}</select></div>
       <button class="btn" onclick="addAccLine()">Add item</button>
+      <button class="btn ghost" onclick="addScooterLine()">+ Scooter (type numbers)</button>
       <button class="btn ghost" onclick="addOtherLine()">+ Other line</button>
     </div>
     <div class="scroll"><table class="tbl" id="lines"></table></div>
@@ -276,6 +277,14 @@ function addAccLine(){
   bill.items.push({itemType:'ACCESSORY',refId:id,description:a.Name,hsn:a.HSN,qty:1,unitPrice:num(a.SalePrice),gstRate:num(a.GSTRate)});
   renderLines();
 }
+/** A scooter line not picked from stock: the shop owner types its numbers. */
+function addScooterLine(){bill.items.push({itemType:'OTHER',scooter:true,refId:'',description:'',chassisNo:'',motorNo:'',controllerNo:'',batteryNo:'',
+  hsn:S.settings.DefaultVehicleHSN||'8711',qty:1,unitPrice:0,gstRate:num(S.settings.DefaultVehicleGSTRate||5)});renderLines();}
+const NO_FIELDS=[['chassisNo','Chassis no.'],['motorNo','Motor no.'],['controllerNo','Controller no.'],['batteryNo','Battery no.']];
+function numberInputs(it,i){
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px;margin-top:6px">${NO_FIELDS.map(([k,l])=>
+    `<div><label style="margin:0 0 2px">${l}</label><input value="${esc(it[k]||'')}" placeholder="Type ${l.toLowerCase()}" style="text-transform:uppercase" oninput="setLine(${i},'${k}',this.value.trim().toUpperCase())"></div>`).join('')}</div>`;
+}
 function addOtherLine(){bill.items.push({itemType:'OTHER',refId:'',description:'',hsn:'',qty:1,unitPrice:0,gstRate:0});renderLines();}
 function removeLine(i){bill.items.splice(i,1);renderBill();}
 function setLine(i,k,v){bill.items[i][k]=v;renderTotals();}
@@ -284,7 +293,7 @@ function renderLines(){
   if(!bill.items.length){$('lines').innerHTML='<tr><td class="muted">No items yet. Add a vehicle, an accessory or an other line (for example registration or insurance charges).</td></tr>';renderTotals();return;}
   $('lines').innerHTML=`<tr><th>#</th><th>Description</th>${g?'<th>HSN</th>':''}<th class="n">Qty</th><th class="n">Price (${g&&bill.pricesIncludeGST?'incl. GST':g?'excl. GST':'each'})</th>${g?'<th class="n">GST %</th><th class="n">Taxable</th><th class="n">GST</th>':''}<th class="n">Amount</th><th></th></tr>`+
   bill.items.map((it,i)=>`<tr><td>${i+1}</td>
-    <td style="min-width:200px"><input value="${esc(it.description)}" oninput="setLine(${i},'description',this.value)">${it.itemType==='VEHICLE'?`<div class="small muted">Chassis ${esc(it.chassisNo)} | Motor ${esc(it.motorNo)} | Battery ${esc(it.batteryNo)}</div>`:''}</td>
+    <td style="min-width:200px"><input value="${esc(it.description)}" oninput="setLine(${i},'description',this.value)">${it.itemType==='VEHICLE'||it.scooter?numberInputs(it,i):''}</td>
     ${g?`<td style="width:90px"><input value="${esc(it.hsn)}" oninput="setLine(${i},'hsn',this.value)"></td>`:''}
     <td style="width:70px"><input type="number" min="1" value="${esc(it.qty)}" ${it.itemType==='VEHICLE'?'disabled':''} oninput="setLine(${i},'qty',this.value)"></td>
     <td style="width:130px"><input type="number" min="0" step="0.01" value="${esc(it.unitPrice)}" oninput="setLine(${i},'unitPrice',this.value)"></td>
@@ -328,7 +337,8 @@ function invoiceHtml(r){
     <div style="text-align:right"><div><b>${g?'Invoice':'Bill'} No:</b> ${esc(inv.InvoiceNo)}</div><div><b>Date:</b> ${fmtDate(inv.Date)}</div>${g?`<div><b>Place of supply:</b> ${esc(inv.PlaceOfSupply)} (${esc(inv.StateCode)})</div><div>Reverse charge: No</div>`:''}</div></div>`;
   const parties=`<div class="parties"><div><b>Bill to</b><div style="font-size:14px;font-weight:700">${esc(inv.CustomerName)}</div><div>${esc(inv.Address)}</div>${inv.Phone?`<div>Ph: ${esc(inv.Phone)}</div>`:''}${g&&inv.CustomerGSTIN?`<div><b>GSTIN: ${esc(inv.CustomerGSTIN)}</b></div>`:''}</div>
     <div><b>Payment</b><div>Mode: ${esc(inv.PaymentMode)}</div><div>Received: ${money(inv.AmountPaid)}</div>${num(inv.Balance)>0?`<div><b>Balance due: ${money(inv.Balance)}</b></div>`:''}${inv.Notes?`<div class="sub">${esc(inv.Notes)}</div>`:''}</div></div>`;
-  const desc=it=>`<b>${esc(it.Description)}</b>${it.ChassisNo?`<div class="sub">Chassis No: ${esc(it.ChassisNo)}<br>Motor No: ${esc(it.MotorNo)}${it.BatteryNo?'<br>Battery No: '+esc(it.BatteryNo):''}</div>`:''}`;
+  const desc=it=>{const nos=[['Chassis No',it.ChassisNo],['Motor No',it.MotorNo],['Controller No',it.ControllerNo],['Battery No',it.BatteryNo]].filter(x=>x[1]);
+    return `<b>${esc(it.Description)}</b>${nos.length?`<div class="sub">${nos.map(x=>esc(x[0])+': <b>'+esc(x[1])+'</b>').join('<br>')}</div>`:''}`;};
   let table;
   if(g){
     table=`<table><tr><th>#</th><th>Description</th><th>HSN</th><th class="n">Qty</th><th class="n">Rate</th><th class="n">Taxable</th><th class="n">GST %</th>${inter?'<th class="n">IGST</th>':'<th class="n">CGST</th><th class="n">SGST</th>'}<th class="n">Total</th></tr>`+

@@ -18,7 +18,7 @@ const SHEETS = {
                  'StateCode', 'Taxable', 'CGST', 'SGST', 'IGST', 'RoundOff', 'Total', 'PaymentMode', 'AmountPaid',
                  'Balance', 'Status', 'Notes', 'CreatedAt'],
   InvoiceItems: ['InvoiceNo', 'Line', 'ItemType', 'RefId', 'Description', 'ChassisNo', 'MotorNo', 'BatteryNo', 'HSN',
-                 'Qty', 'UnitPrice', 'GSTRate', 'Taxable', 'CGST', 'SGST', 'IGST', 'LineTotal']
+                 'Qty', 'UnitPrice', 'GSTRate', 'Taxable', 'CGST', 'SGST', 'IGST', 'LineTotal', 'ControllerNo']
 };
 
 // Columns kept as plain text so Sheets never turns them into numbers or dates.
@@ -27,7 +27,7 @@ const TEXT_COLS = {
   Stock: ['StockId', 'ModelId', 'ChassisNo', 'MotorNo', 'BatteryNo', 'ChargerNo', 'PurchaseInvoiceNo', 'SoldInvoiceNo'],
   Customers: ['Phone', 'GSTIN', 'StateCode', 'LastInvoiceNo'],
   Invoices: ['InvoiceNo', 'Phone', 'CustomerGSTIN', 'StateCode'],
-  InvoiceItems: ['InvoiceNo', 'RefId', 'ChassisNo', 'MotorNo', 'BatteryNo', 'HSN'],
+  InvoiceItems: ['InvoiceNo', 'RefId', 'ChassisNo', 'MotorNo', 'BatteryNo', 'HSN', 'ControllerNo'],
   Models: ['ModelId', 'HSN'],
   Accessories: ['ItemId', 'HSN']
 };
@@ -98,6 +98,16 @@ function ensureSetup_() {
       sh.setFrozenRows(1);
       (TEXT_COLS[name] || []).forEach(col => {
         sh.getRange(2, head.indexOf(col) + 1, sh.getMaxRows() - 1, 1).setNumberFormat('@');
+      });
+    } else {
+      // A sheet made by an older version: add any new columns at the end of the header.
+      const have = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(String);
+      head.forEach((h, i) => {
+        if (have.indexOf(h) < 0 && i >= have.length) {
+          sh.getRange(1, i + 1).setValue(h).setFontWeight('bold').setBackground('#0b0b0b').setFontColor('#c6ff00');
+          if ((TEXT_COLS[name] || []).indexOf(h) >= 0) sh.getRange(2, i + 1, sh.getMaxRows() - 1, 1).setNumberFormat('@');
+          have[i] = h;
+        }
       });
     }
   });
@@ -379,7 +389,10 @@ function createInvoice(p) {
     const items = p.items.map(it => {
       const o = {
         itemType: it.itemType, refId: str_(it.refId), description: str_(it.description), hsn: str_(it.hsn),
-        qty: num_(it.qty), unitPrice: num_(it.unitPrice), gstRate: num_(it.gstRate), chassisNo: '', motorNo: '', batteryNo: ''
+        qty: num_(it.qty), unitPrice: num_(it.unitPrice), gstRate: num_(it.gstRate),
+        // Numbers the shop owner typed on the bill for this scooter (printed on the bill).
+        chassisNo: str_(it.chassisNo).toUpperCase(), motorNo: str_(it.motorNo).toUpperCase(),
+        controllerNo: str_(it.controllerNo).toUpperCase(), batteryNo: str_(it.batteryNo).toUpperCase()
       };
       if (!o.description) throw new Error('Every line needs a description.');
       if (o.qty <= 0) throw new Error('Quantity must be more than zero for ' + o.description + '.');
@@ -387,7 +400,8 @@ function createInvoice(p) {
         const v = stock.find(x => x.StockId === o.refId);
         if (!v) throw new Error('Vehicle not found in stock.');
         if (v.Status !== 'In Stock') throw new Error('Vehicle ' + v.ChassisNo + ' is already sold.');
-        o.qty = 1; o.chassisNo = v.ChassisNo; o.motorNo = v.MotorNo; o.batteryNo = v.BatteryNo; o._row = v._row;
+        o.qty = 1; o._row = v._row;
+        o.chassisNo = o.chassisNo || str_(v.ChassisNo); o.motorNo = o.motorNo || str_(v.MotorNo); o.batteryNo = o.batteryNo || str_(v.BatteryNo);
       }
       if (o.itemType === 'ACCESSORY') {
         const a = acc.find(x => x.ItemId === o.refId);
@@ -426,7 +440,8 @@ function createInvoice(p) {
     appendMany_('InvoiceItems', t.lines.map((l, i) => ({
       InvoiceNo: invNo, Line: i + 1, ItemType: l.itemType, RefId: l.refId, Description: l.description,
       ChassisNo: l.chassisNo, MotorNo: l.motorNo, BatteryNo: l.batteryNo, HSN: l.hsn, Qty: l.qty, UnitPrice: l.unitPrice,
-      GSTRate: l.gstRate, Taxable: l.taxable, CGST: l.cgst, SGST: l.sgst, IGST: l.igst, LineTotal: l.lineTotal
+      GSTRate: l.gstRate, Taxable: l.taxable, CGST: l.cgst, SGST: l.sgst, IGST: l.igst, LineTotal: l.lineTotal,
+      ControllerNo: l.controllerNo
     })));
 
     items.forEach(o => {
@@ -469,7 +484,7 @@ function listInvoices(f) {
   if (q) {
     const chassisHits = {};
     readTable_('InvoiceItems').forEach(it => {
-      if ((str_(it.ChassisNo) + ' ' + str_(it.MotorNo) + ' ' + str_(it.BatteryNo)).toLowerCase().indexOf(q) >= 0) chassisHits[it.InvoiceNo] = 1;
+      if ((str_(it.ChassisNo) + ' ' + str_(it.MotorNo) + ' ' + str_(it.ControllerNo) + ' ' + str_(it.BatteryNo)).toLowerCase().indexOf(q) >= 0) chassisHits[it.InvoiceNo] = 1;
     });
     rows = rows.filter(r => chassisHits[r.InvoiceNo] ||
       [r.InvoiceNo, r.CustomerName, r.Phone, r.CustomerGSTIN].join(' ').toLowerCase().indexOf(q) >= 0);
