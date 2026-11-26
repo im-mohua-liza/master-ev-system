@@ -18,7 +18,7 @@ function mockSheet(name) {
         for (var k = 0; k < rows.length; k++) if (!rows[k]) rows[k] = [];
         mockSave(); return rg;
       },
-      setValue: function (v) { return rg.setValues([[v]]); },
+      setValue: function (v) { return rg.setValues([[v]]); }, setFormula: function () { return rg; }, setFontSize: function () { return rg; },
       setFontWeight: function () { return rg; }, setBackground: function () { return rg; },
       setFontColor: function () { return rg; }, setNumberFormat: function () { return rg; }
     };

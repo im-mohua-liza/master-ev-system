@@ -65,6 +65,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('Master EV')
     .addItem('1. Set up sheets', 'setup')
     .addItem('2. Load Zelio models (optional)', 'loadZelioModels')
+    .addItem('Rebuild Summary tab', 'buildSummary')
     .addItem('Show app link', 'showAppLink')
     .addToUi();
 }
@@ -113,6 +114,7 @@ function ensureSetup_() {
   });
   const sh = ss.getSheetByName('Settings');
   if (sh.getLastRow() < 2) sh.getRange(2, 1, DEFAULT_SETTINGS.length, 2).setValues(DEFAULT_SETTINGS);
+  if (!ss.getSheetByName('Summary')) { try { buildSummary(); } catch (e) { /* summary is optional */ } }
   const blank = ss.getSheetByName('Sheet1');
   if (blank && blank.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(blank);
 }
@@ -226,6 +228,7 @@ function nextInvoiceNo_(billType, dateStr, settings) {
 
 function getBootstrap() {
   ensureSetup_();
+  if (readTable_('Models').length === 0 && typeof loadZelioModels === 'function') loadZelioModels();
   const strip = rows => rows.map(r => { delete r._row; return r; });
   return {
     settings: getSettings_(),
@@ -651,4 +654,91 @@ function identifyScooter(photos) {
   ['chassisNo', 'motorNo', 'batteryNo', 'chargerNo'].forEach(k => { out[k] = str_(out[k]).toUpperCase().replace(/\s+/g, ''); });
   out.duplicate = !!out.chassisNo && readTable_('Stock').some(s => str_(s.ChassisNo).toUpperCase() === out.chassisNo);
   return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* Summary tab: live Google Sheets formulas over the record tabs, so   */
+/* every total is calculated inside the Sheet itself.                   */
+/* Column letters follow SHEETS above (Stock M=Status, L=CostPrice;     */
+/* Invoices C=Date, J..M=Taxable..IGST, O=Total, Q=Paid, R=Balance,     */
+/* S=Status, B=BillType, P=PaymentMode).                                 */
+/* ------------------------------------------------------------------ */
+
+function buildSummary() {
+  const ss = ss_();
+  let sh = ss.getSheetByName('Summary');
+  if (sh) sh.clear(); else sh = ss.insertSheet('Summary', 0);
+  const ACT = '(Invoices!S2:S<>"Cancelled")*(Invoices!A2:A<>"")';
+  const DAY = 'LEFT(TEXT(Invoices!C2:C,"yyyy-mm-dd"),10)';
+  const MON = 'LEFT(TEXT(Invoices!C2:C,"yyyy-mm-dd"),7)';
+  const sumWhere = (col, cond) => '=SUMPRODUCT(' + ACT + '*(' + cond + ')*Invoices!' + col + '2:' + col + ')';
+  const cntWhere = cond => '=SUMPRODUCT(' + ACT + '*(' + cond + '))';
+  const thisMon = MON + '=TEXT(TODAY(),"yyyy-mm")';
+
+  const rows = [
+    ['MASTER EV: LIVE SUMMARY', 'Calculated by the Sheet from the other tabs. Do not type in this tab.'],
+    ['', ''],
+    ['STOCK', ''],
+    ['Scooters in stock', '=COUNTIF(Stock!M2:M,"In Stock")'],
+    ['Scooters sold (all time)', '=COUNTIF(Stock!M2:M,"Sold")'],
+    ['Stock value at cost (scooters)', '=SUMIF(Stock!M2:M,"In Stock",Stock!L2:L)'],
+    ['Accessory pieces in stock', '=SUM(Accessories!E2:E)'],
+    ['Accessory stock value at cost', '=SUMPRODUCT(Accessories!E2:E,Accessories!F2:F)'],
+    ['', ''],
+    ['SALES', ''],
+    ["Today's sales", sumWhere('O', DAY + '=TEXT(TODAY(),"yyyy-mm-dd")')],
+    ["Today's bills", cntWhere(DAY + '=TEXT(TODAY(),"yyyy-mm-dd")')],
+    ['This month: sales', sumWhere('O', thisMon)],
+    ['This month: bills', cntWhere(thisMon)],
+    ['This month: GST bills total', sumWhere('O', thisMon + ')*(Invoices!B2:B="GST"')],
+    ['This month: normal bills total', sumWhere('O', thisMon + ')*(Invoices!B2:B="NORMAL"')],
+    ['This month: taxable value', sumWhere('J', thisMon)],
+    ['This month: CGST', sumWhere('K', thisMon)],
+    ['This month: SGST', sumWhere('L', thisMon)],
+    ['This month: IGST', sumWhere('M', thisMon)],
+    ['This month: total GST', sumWhere('K', thisMon) + '+' + sumWhere('L', thisMon).slice(1) + '+' + sumWhere('M', thisMon).slice(1)],
+    ['Money received (all time)', sumWhere('Q', '1')],
+    ['Balance due from customers', sumWhere('R', '1')],
+    ['Sales all time', sumWhere('O', '1')]
+  ];
+  sh.getRange(1, 1, rows.length, 2).setValues(rows.map(r => [r[0], '']));
+  rows.forEach((r, i) => { if (String(r[1]).charAt(0) === '=') sh.getRange(i + 1, 2).setFormula(r[1]); else sh.getRange(i + 1, 2).setValue(r[1]); });
+
+  // Month by month, last 12 months.
+  const top = rows.length + 2;
+  const head = ['Month', 'Bills', 'Sales', 'Taxable', 'CGST', 'SGST', 'IGST', 'Received', 'Balance due', 'Scooters sold'];
+  sh.getRange(top, 1).setValue('MONTH BY MONTH');
+  sh.getRange(top + 1, 1, 1, head.length).setValues([head]);
+  for (let n = 0; n < 12; n++) {
+    const r = top + 2 + n;
+    const m = 'A' + r;
+    sh.getRange(r, 1).setFormula('=TEXT(EDATE(TODAY(),-' + n + '),"yyyy-mm")');
+    const mc = MON + '=' + m;
+    sh.getRange(r, 2).setFormula(cntWhere(mc));
+    [['C', 'O'], ['D', 'J'], ['E', 'K'], ['F', 'L'], ['G', 'M'], ['H', 'Q'], ['I', 'R']].forEach(([dest, src]) => {
+      sh.getRange(dest + r).setFormula(sumWhere(src, mc));
+    });
+    sh.getRange('J' + r).setFormula('=SUMPRODUCT((Stock!M2:M="Sold")*(LEFT(TEXT(Stock!O2:O,"yyyy-mm-dd"),7)=' + m + '))');
+  }
+
+  // Stock by model and money by payment mode.
+  const side = 4;
+  sh.getRange(side - 1, 4).setValue('STOCK BY MODEL');
+  sh.getRange(side, 4).setFormula('=IFERROR(QUERY(Stock!A1:Q,"select C, count(A) where M = \'In Stock\' group by C order by C label C \'Model\', count(A) \'In stock\'",1),"No stock yet")');
+  sh.getRange(side - 1, 7).setValue('MONEY BY PAYMENT MODE');
+  sh.getRange(side, 7).setFormula('=IFERROR(QUERY(Invoices!A1:U,"select P, sum(Q) where S <> \'Cancelled\' and A is not null group by P label P \'Mode\', sum(Q) \'Received\'",1),"No bills yet")');
+
+  try {
+    [1, 3, 10, top].forEach(r => sh.getRange(r, 1).setFontWeight('bold'));
+    sh.getRange(1, 1).setFontSize(14);
+    sh.getRange(top + 1, 1, 1, head.length).setFontWeight('bold').setBackground('#0b0b0b').setFontColor('#c6ff00');
+    sh.getRange(side - 1, 4, 1, 4).setFontWeight('bold');
+    sh.getRange('B4:B8').setNumberFormat('#,##0');
+    sh.getRange('B6').setNumberFormat('₹#,##0'); sh.getRange('B8').setNumberFormat('₹#,##0');
+    sh.getRange('B11:B' + rows.length).setNumberFormat('₹#,##0.00');
+    sh.getRange('B12').setNumberFormat('0'); sh.getRange('B14').setNumberFormat('0');
+    sh.getRange(top + 2, 3, 12, 7).setNumberFormat('₹#,##0.00');
+    sh.setColumnWidth(1, 260); sh.setColumnWidth(2, 140);
+    sh.setFrozenRows(1);
+  } catch (e) { /* formatting is optional */ }
 }
