@@ -254,15 +254,16 @@ function getDashboard_() {
   const sum = (rows, f) => r2_(rows.reduce((a, r) => a + num_(r[f]), 0));
   const todays = inv.filter(i => String(i.Date).slice(0, 10) === t);
   const month = inv.filter(i => String(i.Date).slice(0, 7) === m);
+  const hist = readTable_('SalesHistory').filter(h => String(h.Date).slice(0, 7) === m);
   return {
     vehiclesInStock: inStock.length,
     stockValue: sum(inStock, 'CostPrice'),
     byModel: Object.keys(byModel).sort().map(k => ({ model: k, count: byModel[k] })),
     lowAccessories: acc.filter(a => num_(a.Qty) <= 2).map(a => ({ name: a.Name, qty: num_(a.Qty) })),
     todaySales: sum(todays, 'Total'), todayBills: todays.length,
-    monthSales: sum(month, 'Total'), monthBills: month.length,
+    monthSales: r2_(sum(month, 'Total') + sum(hist, 'SalePrice')), monthBills: month.length,
     monthGST: r2_(sum(month, 'CGST') + sum(month, 'SGST') + sum(month, 'IGST')),
-    monthVehiclesSold: stock.filter(s => s.Status === 'Sold' && String(s.SoldDate).slice(0, 7) === m).length,
+    monthVehiclesSold: stock.filter(s => s.Status === 'Sold' && String(s.SoldDate).slice(0, 7) === m).length + hist.length,
     pendingBalance: sum(inv.filter(i => num_(i.Balance) > 0), 'Balance'),
     history: historyStats_(),
     recent: inv.slice(-8).reverse().map(i => ({ no: i.InvoiceNo, type: i.BillType, date: i.Date, name: i.CustomerName, total: num_(i.Total), balance: num_(i.Balance) }))
@@ -714,9 +715,9 @@ function buildSummary() {
     ['Cost', '=SUMPRODUCT((SalesHistory!A2:A>=EDATE(TODAY(),-12))*SalesHistory!F2:F)'],
     ['Profit (after losses)', '=B30-B31'],
     ['Loss on scooters sold below cost', '=SUMPRODUCT((SalesHistory!A2:A>=EDATE(TODAY(),-12))*(SalesHistory!E2:E<SalesHistory!F2:F)*(SalesHistory!F2:F-SalesHistory!E2:E))'],
-    ['Last 30 days: scooters', '=COUNTIFS(SalesHistory!A2:A,">="&(TODAY()-30))'],
-    ['Last 30 days: sales value', '=SUMIFS(SalesHistory!E2:E,SalesHistory!A2:A,">="&(TODAY()-30))'],
-    ['Last 30 days: profit', '=SUMIFS(SalesHistory!E2:E,SalesHistory!A2:A,">="&(TODAY()-30))-SUMIFS(SalesHistory!F2:F,SalesHistory!A2:A,">="&(TODAY()-30))']
+    ['This month: scooters', '=SUMPRODUCT((TEXT(SalesHistory!A2:A,"yyyy-mm")=TEXT(TODAY(),"yyyy-mm"))*(SalesHistory!A2:A<>""))'],
+    ['This month: sales value', '=SUMPRODUCT((TEXT(SalesHistory!A2:A,"yyyy-mm")=TEXT(TODAY(),"yyyy-mm"))*(SalesHistory!A2:A<>"")*SalesHistory!E2:E)'],
+    ['This month: profit', '=SUMPRODUCT((TEXT(SalesHistory!A2:A,"yyyy-mm")=TEXT(TODAY(),"yyyy-mm"))*(SalesHistory!A2:A<>"")*(SalesHistory!E2:E-SalesHistory!F2:F))']
   ];
   sh.getRange(1, 1, rows.length, 2).setValues(rows.map(r => [r[0], '']));
   rows.forEach((r, i) => { if (String(r[1]).charAt(0) === '=') sh.getRange(i + 1, 2).setFormula(r[1]); else sh.getRange(i + 1, 2).setValue(r[1]); });
@@ -782,12 +783,13 @@ function loadSalesHistory() {
   const rows = [];
   const add = (n, brand, model, variant, price, cost, note) => rows.push([day(n), brand, model, variant, price, cost, '', note]);
   const addZelio = n => { const m = pick(zelio); add(n, 'Zelio', m[0], m[1], m[2], Math.round(m[2] * 0.88), 'Estimate: cost assumed 88% of price'); };
-  for (let i = 0; i < 5; i++) addZelio(2 + Math.floor(rnd() * 27));      // last month: 5, all Zelio
-  for (let i = 0; i < 46; i++) addZelio(31 + Math.floor(rnd() * 330));   // rest of the year: 46 Zelio
+  const dom = new Date().getDate();
+  for (let i = 0; i < 5; i++) addZelio(Math.floor(rnd() * Math.max(1, dom - 1)));  // this month so far: 5, all Zelio
+  for (let i = 0; i < 46; i++) addZelio(dom + Math.floor(rnd() * (360 - dom)));   // rest of the year: 46 Zelio
   for (let i = 0; i < 22; i++) {                                         // 22 China models
     const price = 45000 + Math.round(rnd() * 15) * 1000;
     const loss = i === 4 || i === 15;                                    // two clearance sales below cost
-    add(31 + Math.floor(rnd() * 330), 'China', 'China model (name to fill)', '', price,
+    add(dom + Math.floor(rnd() * (360 - dom)), 'China', 'China model (name to fill)', '', price,
       loss ? price + 3000 : Math.round(price * 0.82),
       loss ? 'Estimate: sold below cost (clearance)' : 'Estimate: cost assumed 82% of price');
   }
@@ -816,6 +818,6 @@ function historyStats_() {
   const y = rows.filter(r => String(r.Date).slice(0, 10) >= cut(365));
   const top = {};
   y.forEach(r => { top[r.Model] = (top[r.Model] || 0) + 1; });
-  return { year: st(y), month: st(rows.filter(r => String(r.Date).slice(0, 10) >= cut(30))),
+  return { year: st(y), month: st(rows.filter(r => String(r.Date).slice(0, 7) === today_().slice(0, 7))),
     byModel: Object.keys(top).map(k => ({ model: k, count: top[k] })).sort((a, b) => b.count - a.count) };
 }

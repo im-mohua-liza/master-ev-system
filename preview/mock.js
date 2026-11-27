@@ -1,6 +1,6 @@
 /* Local preview only: fakes Google Sheets in the browser (localStorage) so the
    real Code.gs runs unchanged. Not used in the Google deployment. */
-var MOCK_KEY = 'masterev-preview-v1';
+var MOCK_KEY = 'masterev-preview-v2';
 var MOCK_DB = (function () { try { return JSON.parse(localStorage.getItem(MOCK_KEY)) || {}; } catch (e) { return {}; } })();
 function mockSave() { try { localStorage.setItem(MOCK_KEY, JSON.stringify(MOCK_DB)); } catch (e) {} }
 function mockSheet(name) {

@@ -188,7 +188,7 @@ function renderDash(){
   <h2>${esc(set.ShopName||'Master EV')}</h2>
   <div class="grid">
     <div class="stat hl"><div class="k">Today's sales</div><div class="v">${money0(d.todaySales)}</div><div class="small">${d.todayBills||0} bills</div></div>
-    <div class="stat"><div class="k">This month</div><div class="v">${money0(d.monthSales)}</div><div class="small muted">${d.monthBills||0} bills, ${d.monthVehiclesSold||0} vehicles</div></div>
+    <div class="stat"><div class="k">This month</div><div class="v">${money0(d.monthSales)}</div><div class="small muted">${d.monthVehiclesSold||0} scooters sold, ${d.monthBills||0} bills</div></div>
     <div class="stat"><div class="k">GST this month</div><div class="v">${money0(d.monthGST)}</div></div>
     <div class="stat"><div class="k">Vehicles in stock</div><div class="v">${d.vehiclesInStock||0}</div><div class="small muted">Cost value ${money0(d.stockValue)}</div></div>
     <div class="stat"><div class="k">Balance due</div><div class="v" style="color:${d.pendingBalance>0?'var(--red)':'inherit'}">${money0(d.pendingBalance)}</div></div>
@@ -210,7 +210,7 @@ function histCard(h){
     <div class="stat"><div class="k">Sales value</div><div class="v">${money0(y.sales)}</div><div class="small muted">Cost ${money0(y.cost)}</div></div>
     <div class="stat"><div class="k">Profit</div><div class="v" style="color:${y.profit<0?'var(--red)':'inherit'}">${money0(y.profit)}</div></div>
     <div class="stat"><div class="k">Loss</div><div class="v" style="color:var(--red)">${money0(y.loss)}</div><div class="small muted">${y.lossUnits} sold below cost</div></div>
-    <div class="stat"><div class="k">Last 30 days</div><div class="v">${m.units} sold</div><div class="small muted">${money0(m.sales)}, profit ${money0(m.profit)}</div></div>
+    <div class="stat"><div class="k">This month</div><div class="v">${m.units} sold</div><div class="small muted">${money0(m.sales)}, profit ${money0(m.profit)}</div></div>
   </div>
   <div class="card" style="margin-top:12px"><h3 style="margin-top:0">Sold by model (12 months)</h3><table class="tbl">${h.byModel.map(r=>`<tr><td>${esc(r.model)}</td><td class="n"><b>${r.count}</b></td></tr>`).join('')}</table>
   <p class="small muted">From the SalesHistory tab in Google Sheets. Cost prices, China prices and the model mix are estimates: type the real figures there and this updates.</p></div>`;
