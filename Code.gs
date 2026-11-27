@@ -18,7 +18,9 @@ const SHEETS = {
                  'StateCode', 'Taxable', 'CGST', 'SGST', 'IGST', 'RoundOff', 'Total', 'PaymentMode', 'AmountPaid',
                  'Balance', 'Status', 'Notes', 'CreatedAt'],
   InvoiceItems: ['InvoiceNo', 'Line', 'ItemType', 'RefId', 'Description', 'ChassisNo', 'MotorNo', 'BatteryNo', 'HSN',
-                 'Qty', 'UnitPrice', 'GSTRate', 'Taxable', 'CGST', 'SGST', 'IGST', 'LineTotal', 'ControllerNo']
+                 'Qty', 'UnitPrice', 'GSTRate', 'Taxable', 'CGST', 'SGST', 'IGST', 'LineTotal', 'ControllerNo'],
+  // Past sales from before the system (one row per scooter). Kept apart from Invoices so GST reports stay real.
+  SalesHistory: ['Date', 'Brand', 'Model', 'Variant', 'SalePrice', 'CostPrice', 'Profit', 'Note']
 };
 
 // Columns kept as plain text so Sheets never turns them into numbers or dates.
@@ -66,6 +68,7 @@ function onOpen() {
     .addItem('1. Set up sheets', 'setup')
     .addItem('2. Load Zelio models (optional)', 'loadZelioModels')
     .addItem('Rebuild Summary tab', 'buildSummary')
+    .addItem('Reload past sales (estimate)', 'reloadSalesHistory')
     .addItem('Show app link', 'showAppLink')
     .addToUi();
 }
@@ -229,6 +232,7 @@ function nextInvoiceNo_(billType, dateStr, settings) {
 function getBootstrap() {
   ensureSetup_();
   if (readTable_('Models').length === 0 && typeof loadZelioModels === 'function') loadZelioModels();
+  if (readTable_('SalesHistory').length === 0) { loadSalesHistory(); try { buildSummary(); } catch (e) { /* optional */ } }
   const strip = rows => rows.map(r => { delete r._row; return r; });
   return {
     settings: getSettings_(),
@@ -260,6 +264,7 @@ function getDashboard_() {
     monthGST: r2_(sum(month, 'CGST') + sum(month, 'SGST') + sum(month, 'IGST')),
     monthVehiclesSold: stock.filter(s => s.Status === 'Sold' && String(s.SoldDate).slice(0, 7) === m).length,
     pendingBalance: sum(inv.filter(i => num_(i.Balance) > 0), 'Balance'),
+    history: historyStats_(),
     recent: inv.slice(-8).reverse().map(i => ({ no: i.InvoiceNo, type: i.BillType, date: i.Date, name: i.CustomerName, total: num_(i.Total), balance: num_(i.Balance) }))
   };
 }
@@ -699,7 +704,19 @@ function buildSummary() {
     ['This month: total GST', sumWhere('K', thisMon) + '+' + sumWhere('L', thisMon).slice(1) + '+' + sumWhere('M', thisMon).slice(1)],
     ['Money received (all time)', sumWhere('Q', '1')],
     ['Balance due from customers', sumWhere('R', '1')],
-    ['Sales all time', sumWhere('O', '1')]
+    ['Sales all time', sumWhere('O', '1')],
+    ['', ''],
+    ['PAST SALES, LAST 12 MONTHS (from the SalesHistory tab)', ''],
+    ['Scooters sold', '=SUMPRODUCT((SalesHistory!A2:A<>"")*(SalesHistory!A2:A>=EDATE(TODAY(),-12)))'],
+    ['  Zelio', '=SUMPRODUCT((SalesHistory!B2:B="Zelio")*(SalesHistory!A2:A>=EDATE(TODAY(),-12)))'],
+    ['  China models', '=SUMPRODUCT((SalesHistory!B2:B="China")*(SalesHistory!A2:A>=EDATE(TODAY(),-12)))'],
+    ['Sales value', '=SUMPRODUCT((SalesHistory!A2:A>=EDATE(TODAY(),-12))*SalesHistory!E2:E)'],
+    ['Cost', '=SUMPRODUCT((SalesHistory!A2:A>=EDATE(TODAY(),-12))*SalesHistory!F2:F)'],
+    ['Profit (after losses)', '=B30-B31'],
+    ['Loss on scooters sold below cost', '=SUMPRODUCT((SalesHistory!A2:A>=EDATE(TODAY(),-12))*(SalesHistory!E2:E<SalesHistory!F2:F)*(SalesHistory!F2:F-SalesHistory!E2:E))'],
+    ['Last 30 days: scooters', '=COUNTIFS(SalesHistory!A2:A,">="&(TODAY()-30))'],
+    ['Last 30 days: sales value', '=SUMIFS(SalesHistory!E2:E,SalesHistory!A2:A,">="&(TODAY()-30))'],
+    ['Last 30 days: profit', '=SUMIFS(SalesHistory!E2:E,SalesHistory!A2:A,">="&(TODAY()-30))-SUMIFS(SalesHistory!F2:F,SalesHistory!A2:A,">="&(TODAY()-30))']
   ];
   sh.getRange(1, 1, rows.length, 2).setValues(rows.map(r => [r[0], '']));
   rows.forEach((r, i) => { if (String(r[1]).charAt(0) === '=') sh.getRange(i + 1, 2).setFormula(r[1]); else sh.getRange(i + 1, 2).setValue(r[1]); });
@@ -736,9 +753,69 @@ function buildSummary() {
     sh.getRange('B4:B8').setNumberFormat('#,##0');
     sh.getRange('B6').setNumberFormat('₹#,##0'); sh.getRange('B8').setNumberFormat('₹#,##0');
     sh.getRange('B11:B' + rows.length).setNumberFormat('₹#,##0.00');
+    sh.getRange('B27:B29').setNumberFormat('0'); sh.getRange('B34').setNumberFormat('0'); sh.getRange(26, 1).setFontWeight('bold');
     sh.getRange('B12').setNumberFormat('0'); sh.getRange('B14').setNumberFormat('0');
     sh.getRange(top + 2, 3, 12, 7).setNumberFormat('₹#,##0.00');
     sh.setColumnWidth(1, 260); sh.setColumnWidth(2, 140);
     sh.setFrozenRows(1);
   } catch (e) { /* formatting is optional */ }
+}
+
+/* ------------------------------------------------------------------ */
+/* Past sales (before the system). Owner's count: 73 scooters in the    */
+/* last 12 months, 51 Zelio and 22 China models; about 5 in the last    */
+/* month, all Zelio. Zelio prices come from the Zelio list; China       */
+/* prices, the model mix and all cost prices are ESTIMATES. Type real   */
+/* figures into the SalesHistory tab and every total updates.           */
+/* ------------------------------------------------------------------ */
+
+function loadSalesHistory() {
+  ensureSetup_();
+  const sh = sheet_('SalesHistory');
+  if (sh.getLastRow() > 1) return;
+  let seed = 7;
+  const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+  const pick = a => a[Math.floor(rnd() * a.length)];
+  const zelioNames = ['Gracy', 'EEVA ZX+', 'Eeva Eco', 'EEVA ZX', 'X Men+', 'Logix Loader', 'Little Gracy'];
+  const zelio = (typeof ZELIO_MODELS !== 'undefined' ? ZELIO_MODELS : []).filter(m => zelioNames.indexOf(m[0]) >= 0);
+  const day = n => { const d = new Date(); d.setDate(d.getDate() - n); return Utilities.formatDate(d, tz_(), 'yyyy-MM-dd'); };
+  const rows = [];
+  const add = (n, brand, model, variant, price, cost, note) => rows.push([day(n), brand, model, variant, price, cost, '', note]);
+  const addZelio = n => { const m = pick(zelio); add(n, 'Zelio', m[0], m[1], m[2], Math.round(m[2] * 0.88), 'Estimate: cost assumed 88% of price'); };
+  for (let i = 0; i < 5; i++) addZelio(2 + Math.floor(rnd() * 27));      // last month: 5, all Zelio
+  for (let i = 0; i < 46; i++) addZelio(31 + Math.floor(rnd() * 330));   // rest of the year: 46 Zelio
+  for (let i = 0; i < 22; i++) {                                         // 22 China models
+    const price = 45000 + Math.round(rnd() * 15) * 1000;
+    const loss = i === 4 || i === 15;                                    // two clearance sales below cost
+    add(31 + Math.floor(rnd() * 330), 'China', 'China model (name to fill)', '', price,
+      loss ? price + 3000 : Math.round(price * 0.82),
+      loss ? 'Estimate: sold below cost (clearance)' : 'Estimate: cost assumed 82% of price');
+  }
+  rows.sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+  rows.forEach((r, i) => { r[6] = '=E' + (i + 2) + '-F' + (i + 2); });
+  sh.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+  try { sh.getRange(2, 5, rows.length, 3).setNumberFormat('₹#,##0'); } catch (e) {}
+}
+
+function reloadSalesHistory() {
+  const sh = sheet_('SalesHistory');
+  if (sh && sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, SHEETS.SalesHistory.length).clearContent();
+  loadSalesHistory();
+}
+
+function historyStats_() {
+  const rows = readTable_('SalesHistory');
+  const cut = n => { const d = new Date(); d.setDate(d.getDate() - n); return Utilities.formatDate(d, tz_(), 'yyyy-MM-dd'); };
+  const st = list => {
+    const sale = list.reduce((a, r) => a + num_(r.SalePrice), 0), cost = list.reduce((a, r) => a + num_(r.CostPrice), 0);
+    const below = list.filter(r => num_(r.SalePrice) < num_(r.CostPrice));
+    return { units: list.length, zelio: list.filter(r => r.Brand === 'Zelio').length, china: list.filter(r => r.Brand === 'China').length,
+      sales: r2_(sale), cost: r2_(cost), profit: r2_(sale - cost), lossUnits: below.length,
+      loss: r2_(below.reduce((a, r) => a + num_(r.CostPrice) - num_(r.SalePrice), 0)) };
+  };
+  const y = rows.filter(r => String(r.Date).slice(0, 10) >= cut(365));
+  const top = {};
+  y.forEach(r => { top[r.Model] = (top[r.Model] || 0) + 1; });
+  return { year: st(y), month: st(rows.filter(r => String(r.Date).slice(0, 10) >= cut(30))),
+    byModel: Object.keys(top).map(k => ({ model: k, count: top[k] })).sort((a, b) => b.count - a.count) };
 }

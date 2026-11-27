@@ -20,7 +20,7 @@ function mockSheet(name) {
       },
       setValue: function (v) { return rg.setValues([[v]]); }, setFormula: function () { return rg; }, setFontSize: function () { return rg; },
       setFontWeight: function () { return rg; }, setBackground: function () { return rg; },
-      setFontColor: function () { return rg; }, setNumberFormat: function () { return rg; }
+      setFontColor: function () { return rg; }, clearContent: function () { return rg; }, setNumberFormat: function () { return rg; }
     };
     return rg;
   }
